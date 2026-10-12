@@ -76,6 +76,7 @@ trait location_parameters {
             }
             location_access::require_edit_access_for_course($pending->courseid);
             self::validate_context(\context_course::instance($pending->courseid));
+            self::require_dixeo_enabled($pending->courseid);
             return $pending;
         }
         if (!eligibility::is_eligible_stored_file($file)) {
@@ -88,8 +89,20 @@ trait location_parameters {
         }
 
         self::authorise_location_access($file, $location->courseid);
+        self::require_dixeo_enabled($location->courseid);
 
         return $location;
+    }
+
+    /**
+     * Stop an image-editor request when Dixeo is off for the file's course.
+     *
+     * @param int $courseid
+     * @return void
+     */
+    private static function require_dixeo_enabled(int $courseid): void {
+        \local_dixeo\external\service_factory::get_settings_config()
+            ->require_enabled(\context_course::instance($courseid));
     }
 
     /**

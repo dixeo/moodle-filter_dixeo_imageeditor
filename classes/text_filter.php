@@ -41,6 +41,11 @@ class text_filter extends \core_filters\text_filter {
         if (!feature_gate::is_globally_enabled()) {
             return;
         }
+        // Image editing is a Dixeo feature, so its scripts stay unloaded while Dixeo is off.
+        // Global filter setup passes the system context, so a course page uses that course.
+        if (!$this->dixeo_enabled_for_page($page, $context)) {
+            return;
+        }
         if (!self::$amdsloaded) {
             $page->requires->js_call_amd('filter_dixeo_imageeditor/editor', 'init');
             $page->requires->css('/filter/dixeo_imageeditor/styles.css');
@@ -88,6 +93,10 @@ class text_filter extends \core_filters\text_filter {
     #[\Override]
     public function filter($text, array $options = []): string {
         if (!feature_gate::is_globally_enabled()) {
+            return $text;
+        }
+        // Image editing is a Dixeo feature, so the text is left unchanged while Dixeo is off.
+        if (!\local_dixeo\external\service_factory::get_settings_config()->enabled_for($this->context)) {
             return $text;
         }
         if ($text === '' || stripos($text, '<img') === false) {
@@ -210,5 +219,21 @@ class text_filter extends \core_filters\text_filter {
             $html .= $dom->saveHTML($child);
         }
         return $html;
+    }
+
+    /**
+     * Whether Dixeo image editing runs for this page.
+     *
+     * A page inside a course follows that course. Any other page follows the
+     * context the filter was given.
+     *
+     * @param \moodle_page $page
+     * @param \context $context
+     * @return bool
+     */
+    private function dixeo_enabled_for_page(\moodle_page $page, \context $context): bool {
+        $courseid = (int) ($page->course->id ?? 0);
+        $gatecontext = $courseid > SITEID ? \context_course::instance($courseid) : $context;
+        return \local_dixeo\external\service_factory::get_settings_config()->enabled_for($gatecontext);
     }
 }
