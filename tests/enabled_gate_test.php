@@ -39,7 +39,6 @@ use local_dixeo\service\image\content\location;
  * @covers     \filter_dixeo_imageeditor\external\get_location_status::execute
  */
 final class enabled_gate_test extends \advanced_testcase {
-
     /**
      * Setup does not load the editor while the course is off, and does once it is on.
      */
@@ -142,6 +141,8 @@ final class enabled_gate_test extends \advanced_testcase {
     }
 
     /**
+     * Course page the filter can run against.
+     *
      * @param \stdClass $course
      * @return \moodle_page
      */
@@ -156,6 +157,8 @@ final class enabled_gate_test extends \advanced_testcase {
     }
 
     /**
+     * Page activity with one image in its content files.
+     *
      * @return array{0: \stored_file, 1: int}
      */
     private function create_page_image(): array {
