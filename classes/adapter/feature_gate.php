@@ -54,17 +54,21 @@ final class feature_gate {
     /**
      * Policy flags for UI.
      *
+     * @param int $courseid Course whose content-image override applies. Zero uses the Dixeo layer.
      * @return array{can_generate: bool, can_edit: bool}
      */
-    public static function policy_flags(): array {
+    public static function policy_flags(int $courseid = 0): array {
+        $context = $courseid > 0 ? \context_course::instance($courseid) : null;
         return [
             'can_generate' => policy::is_enabled(
                 policy::ENTITY_CONTENT,
-                policy::ACTION_GENERATE
+                policy::ACTION_GENERATE,
+                $context
             ),
             'can_edit' => policy::is_enabled(
                 policy::ENTITY_CONTENT,
-                policy::ACTION_EDIT
+                policy::ACTION_EDIT,
+                $context
             ),
         ];
     }

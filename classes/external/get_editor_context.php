@@ -77,7 +77,7 @@ final class get_editor_context extends external_api {
 
         $location = self::validate_location($params);
 
-        $policy = feature_gate::policy_flags();
+        $policy = feature_gate::policy_flags((int) $location->courseid);
         $caps = feature_gate::capability_flags($location->courseid);
         $status = job_repository::get_location_status($location, false);
         $currentfile = $location->get_stored_file();
