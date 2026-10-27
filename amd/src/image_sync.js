@@ -104,6 +104,34 @@ define([], function() {
     };
 
     /**
+     * Repaint a slideshow featured image, which is a CSS background rather than an img.
+     *
+     * @param {HTMLElement} wrap
+     * @param {string} imageurl
+     * @param {string} contenthash
+     */
+    const paintSlideshowSlide = (wrap, imageurl, contenthash) => {
+        if (wrap.dataset.slideshowSlide !== '1' || !imageurl) {
+            return;
+        }
+        const slide = wrap.closest('.slide');
+        if (!(slide instanceof HTMLElement)) {
+            return;
+        }
+        const painted = appendImageRev(imageurl, contenthash);
+        const target = slide.querySelector('.slide-backdrop, .slide-media');
+        if (target instanceof HTMLElement) {
+            target.style.backgroundImage = 'url("' + painted.replace(/"/g, '') + '")';
+        }
+        slide.classList.add('has-image');
+        const path = painted.split('?')[0].split('/');
+        const filename = decodeURIComponent(path[path.length - 1] || '');
+        if (filename && filename !== '.') {
+            wrap.dataset.filename = filename;
+        }
+    };
+
+    /**
      * Update the embedded image src after a successful job.
      *
      * @param {HTMLElement} wrap
@@ -115,6 +143,7 @@ define([], function() {
     const applyImageToWrap = (wrap, imageurl, contenthash = '', options = {}) => {
         const hash = contenthash || wrap.dataset.contenthash || '';
         paintTilesSection(wrap, imageurl, hash);
+        paintSlideshowSlide(wrap, imageurl, hash);
         if (hash) {
             wrap.dataset.contenthash = hash;
         }

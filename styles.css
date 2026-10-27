@@ -519,3 +519,50 @@
 .format-tiles li.tile:focus-within > .dixeo-tiles-imageeditor .dixeo-imageeditor-editbtn {
     opacity: 1;
 }
+
+body.path-mod-slideshow .slide > .dixeo-slideshow-imageeditor,
+body.path-mod-slideshow .slide-media > .dixeo-slideshow-imageeditor {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 6;
+    display: block;
+    width: auto;
+    max-width: calc(100% - 1rem);
+}
+
+body.path-mod-slideshow .slide > .dixeo-slideshow-imageeditor .dixeo-imageeditor-editbtn,
+body.path-mod-slideshow .slide-media > .dixeo-slideshow-imageeditor .dixeo-imageeditor-editbtn {
+    position: static;
+    color: #fff;
+}
+
+body.path-mod-slideshow .dixeo-slideshow-imageeditor .dixeo-imageeditor-editbtn:hover,
+body.path-mod-slideshow .dixeo-slideshow-imageeditor .dixeo-imageeditor-editbtn:focus,
+body.path-mod-slideshow .dixeo-slideshow-imageeditor .dixeo-imageeditor-editbtn:active {
+    color: #fff;
+    background-color: rgba(16, 27, 44, 0.82);
+}
+
+body.path-mod-slideshow .slide > .dixeo-slideshow-imageeditor.is-generating,
+body.path-mod-slideshow .slide-media > .dixeo-slideshow-imageeditor.is-generating {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    max-width: none;
+}
+
+body.path-mod-slideshow .slide > .dixeo-slideshow-imageeditor.is-generating .dixeo-imageeditor-editbtn,
+body.path-mod-slideshow .slide-media > .dixeo-slideshow-imageeditor.is-generating .dixeo-imageeditor-editbtn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+}
+
+body.path-mod-slideshow .slide:hover .dixeo-slideshow-imageeditor .dixeo-imageeditor-editbtn,
+body.path-mod-slideshow .slide:focus-within .dixeo-slideshow-imageeditor .dixeo-imageeditor-editbtn {
+    color: #fff;
+    opacity: 1;
+}
