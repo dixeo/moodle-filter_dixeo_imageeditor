@@ -43,7 +43,7 @@ class text_filter extends \core_filters\text_filter {
         }
         if (!self::$amdsloaded) {
             $page->requires->js_call_amd('filter_dixeo_imageeditor/editor', 'init');
-            $page->requires->css('/filter/dixeo_imageeditor/styles.css');
+            // Styles.css is included by the theme. Cropper.css is a third-party sheet.
             $page->requires->css('/filter/dixeo_imageeditor/cropper.css');
             self::$amdsloaded = true;
         }
