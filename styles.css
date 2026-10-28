@@ -35,7 +35,7 @@
     flex: 0 0 auto;
     width: 0.875rem;
     height: 0.9375rem;
-    background-image: url('pix/sparkle.svg');
+    background-image: url([[pix:filter_dixeo_imageeditor|sparkle]]);
     background-repeat: no-repeat;
     background-position: center;
     background-size: contain;
@@ -135,7 +135,7 @@
     flex: 0 0 auto;
     width: 0.875rem;
     height: 0.9375rem;
-    background-image: url('pix/sparkle.svg');
+    background-image: url([[pix:filter_dixeo_imageeditor|sparkle]]);
     background-repeat: no-repeat;
     background-position: center;
     background-size: contain;

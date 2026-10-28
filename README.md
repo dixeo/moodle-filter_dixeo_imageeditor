@@ -33,9 +33,8 @@ If the key is missing, the account has no credits, or the content image policy d
 ## Installation
 
 1. Install and upgrade `local_dixeo` first.
-2. Copy `dixeo_imageeditor` to `/filter/dixeo_imageeditor/`, or install the ZIP under **Site administration → Plugins → Install plugins**.
-3. Visit **Site administration → Notifications**.
-4. Enable the filter under **Site administration → Plugins → Filters → Manage filters**.
+2. Install the release ZIP `filter_dixeo_imageeditor-<release>.zip` under **Site administration → Plugins → Install plugins**, or copy the `dixeo_imageeditor` directory to `/filter/dixeo_imageeditor/`.
+3. Enable the filter under **Site administration → Plugins → Filters → Manage filters**.
 
 No Composer install step is required.
 
