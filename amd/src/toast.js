@@ -164,6 +164,28 @@ define([], function() {
         showResult(wrap, modalRoot || null, message, type, durationMs);
     };
 
+    /**
+     * Show the fading reason in the open editor only.
+     *
+     * The content image has its own top-centre notice, so a second copy on the wrap
+     * would stack the same sentence.
+     *
+     * @param {HTMLElement} wrap
+     * @param {string} message
+     * @param {'success'|'error'} [type]
+     * @param {number} [durationMs]
+     */
+    const showModalOnly = (wrap, message, type = 'error', durationMs = DEFAULT_DURATION_MS) => {
+        const modalRoot = wrap instanceof HTMLElement ? openModalRoots.get(wrap) : null;
+        if (!(modalRoot instanceof HTMLElement)) {
+            return;
+        }
+        const previewPanel = modalRoot.querySelector('[data-region="preview-panel"]');
+        if (previewPanel instanceof HTMLElement) {
+            showInContainer(previewPanel, message, type, durationMs);
+        }
+    };
+
     return {
         DEFAULT_DURATION_MS,
         registerOpenModal,
@@ -172,5 +194,6 @@ define([], function() {
         showForWrap,
         showResult,
         showJobResult,
+        showModalOnly,
     };
 });

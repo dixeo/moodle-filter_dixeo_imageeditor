@@ -45,40 +45,14 @@ define([
      * Refresh pending/failed status pills after class changes on a wrap.
      *
      * @param {HTMLElement} wrap
+     * @param {string} [failedMessage] Same sentence shown for this failure elsewhere.
      */
-    const refreshContentImageHost = (wrap) => {
+    const refreshContentImageHost = (wrap, failedMessage = '') => {
         require(['local_dixeo/content_image_pending'], (pending) => {
-            pending.refresh(wrap);
+            pending.refresh(wrap, failedMessage);
         }, () => {
             // Optional host module may be unavailable on some pages.
         });
-    };
-
-    /**
-     * Apply a terminal status payload to the wrap image.
-     *
-     * @param {HTMLElement} wrap
-     * @param {Object} status
-     */
-    const applyTerminalStatus = (wrap, status) => {
-        const imageurl = status.imageurl || '';
-        const hash = status.current_contenthash || '';
-        if (!imageurl) {
-            // Still clear pending class so shimmer stops even without a URL.
-            const img = wrap.querySelector('img');
-            if (img instanceof HTMLImageElement) {
-                img.classList.remove('dixeo-img-gen-pending');
-                if (status.status === 'failed') {
-                    img.classList.add('dixeo-img-gen-failed');
-                }
-            }
-            refreshContentImageHost(wrap);
-            return;
-        }
-        imageSync.applyImageToWrap(wrap, imageurl, hash, {
-            failed: status.status === 'failed',
-        });
-        refreshContentImageHost(wrap);
     };
 
     /**
@@ -96,6 +70,42 @@ define([
         }
         wrap.classList.remove(GENERATING_CLASS);
         delete wrap.dataset.dixeoImageGeneratingLabel;
+    };
+
+    /**
+     * Apply a terminal status payload to the wrap image.
+     *
+     * A failure clears the generating overlay before the content pill is painted.
+     * The overlay hides that pill, so painting first would drop the message.
+     *
+     * @param {HTMLElement} wrap
+     * @param {Object} status
+     * @param {string} [failedMessage] Sentence to show on the content image.
+     */
+    const applyTerminalStatus = (wrap, status, failedMessage = '') => {
+        const imageurl = status.imageurl || '';
+        const hash = status.current_contenthash || '';
+        const failed = status.status === 'failed';
+        const message = failed ? (failedMessage || status.errormessage || '').trim() : '';
+        if (failed) {
+            setGeneratingOverlay(wrap, false);
+        }
+        if (!imageurl) {
+            // Still clear pending class so shimmer stops even without a URL.
+            const img = wrap.querySelector('img');
+            if (img instanceof HTMLImageElement) {
+                img.classList.remove('dixeo-img-gen-pending');
+                if (failed) {
+                    img.classList.add('dixeo-img-gen-failed');
+                }
+            }
+            refreshContentImageHost(wrap, message);
+            return;
+        }
+        imageSync.applyImageToWrap(wrap, imageurl, hash, {
+            failed,
+        });
+        refreshContentImageHost(wrap, message);
     };
 
     /**
@@ -133,15 +143,21 @@ define([
      * @param {HTMLElement} wrap
      * @param {'success'|'error'} type
      * @param {string} [message]
+     * @param {Object} [options]
+     * @param {boolean} [options.modalOnly] Skip the image toast. The content pill owns that copy.
      * @returns {Promise<void>}
      */
-    const notifyJobResult = async(wrap, type, message = '') => {
+    const notifyJobResult = async(wrap, type, message = '', options = {}) => {
         let text = message;
         if (!text) {
             text = await Str.getString(
                 type === 'success' ? 'image_updated' : 'error_job_failed',
                 'filter_dixeo_imageeditor'
             );
+        }
+        if (type === 'error' && options.modalOnly) {
+            toast.showModalOnly(wrap, text, type);
+            return;
         }
         toast.showJobResult(wrap, text, type);
     };
@@ -205,11 +221,11 @@ define([
                 }
 
                 if (status.status === 'failed') {
-                    applyTerminalStatus(wrap, status);
-                    setGeneratingOverlay(wrap, false);
-                    const message = status.errormessage
+                    const message = (status.errormessage || '').trim()
                         || await Str.getString('error_job_failed', 'filter_dixeo_imageeditor');
-                    await notifyJobResult(wrap, 'error', message);
+                    applyTerminalStatus(wrap, status, message);
+                    setGeneratingOverlay(wrap, false);
+                    await notifyJobResult(wrap, 'error', message, {modalOnly: true});
                     if (callbacks.onFailed) {
                         callbacks.onFailed(status);
                     }
