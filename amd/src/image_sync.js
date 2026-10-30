@@ -164,7 +164,9 @@ define([], function() {
         } else {
             img.removeAttribute('data-dixeo-contenthash');
         }
-        wrap.querySelectorAll(':scope > .dixeo-img-gen-status').forEach((el) => el.remove());
+        wrap.querySelectorAll(':scope > .dixeo-img-gen-status, :scope > .dixeo-img-gen-notice').forEach((el) => {
+            el.remove();
+        });
     };
 
     /**
