@@ -44,22 +44,28 @@ jobs:
       - name: Resolve Dixeo sibling branch
         id: dixeo_dep
         working-directory: plugin
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "branch=${{ github.head_ref }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.ref_type }}" = "tag" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "branch=$HEAD_REF" >> "$GITHUB_OUTPUT"
+          elif [ "$REF_TYPE" = "tag" ]; then
             git fetch origin release main development
             BRANCH=""
             for candidate in release main development; do
               if git show-ref --verify --quiet "refs/remotes/origin/$candidate" \
-                && git merge-base --is-ancestor "${{ github.sha }}" "origin/$candidate"; then
+                && git merge-base --is-ancestor "$COMMIT_SHA" "origin/$candidate"; then
                 BRANCH="$candidate"
                 break
               fi
             done
             echo "branch=${BRANCH:-main}" >> "$GITHUB_OUTPUT"
           else
-            echo "branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "branch=$REF_NAME" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Setup PHP ${{ matrix.php }}
@@ -83,9 +89,10 @@ jobs:
       - name: Install moodle-plugin-ci
         run: |
           # Declared in version.php dependencies; required for caps, services, and PHPUnit mocks.
-          moodle-plugin-ci add-plugin --branch "${{ steps.dixeo_dep.outputs.branch }}" dixeo/moodle-local_dixeo
+          moodle-plugin-ci add-plugin --branch "$DIXEO_BRANCH" dixeo/moodle-local_dixeo
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
+          DIXEO_BRANCH: ${{ steps.dixeo_dep.outputs.branch }}
           DB: ${{ matrix.database }}
           MOODLE_BRANCH: ${{ matrix.moodle-branch }}
           # Uncomment this to run Behat tests using the Moodle App.
