@@ -188,11 +188,7 @@ final class file_replacer {
      * @return bool
      */
     public static function is_status_asset_hash(string $contenthash): bool {
-        if ($contenthash === '') {
-            return false;
-        }
-        return $contenthash === sha1(asset_helper::get_placeholder_binary())
-            || $contenthash === sha1(asset_helper::get_error_binary());
+        return asset_helper::is_status_asset_hash($contenthash);
     }
 
     /**

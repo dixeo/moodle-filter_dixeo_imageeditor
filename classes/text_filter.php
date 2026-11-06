@@ -38,6 +38,12 @@ class text_filter extends \core_filters\text_filter {
 
     #[\Override]
     public function setup($page, $context): void {
+        // Only editors get the editor assets: the same rule as filter(), on the page's course.
+        $courseid = (int) ($page->course->id ?? 0);
+        $pagecoursecontext = \context_course::instance($courseid > 0 ? $courseid : SITEID, IGNORE_MISSING);
+        if (!$pagecoursecontext || !has_capability('filter/dixeo_imageeditor:edit', $pagecoursecontext)) {
+            return;
+        }
         if (!feature_gate::is_globally_enabled()) {
             return;
         }
@@ -90,19 +96,35 @@ class text_filter extends \core_filters\text_filter {
         self::$tilesloaded = true;
     }
 
+    /**
+     * Wrap eligible images with the edit control.
+     *
+     * This runs on every formatted text for every user, so the checks go from cheapest to most
+     * expensive: stage, markup, the edit capability in the filter context's course, the filter
+     * state, then the Dixeo switch. Images from another course than the filter context's are
+     * left unwrapped; each image is still checked against its own course.
+     *
+     * @param string $text HTML to filter.
+     * @param array $options Filter options, including the format_text() stage.
+     * @return string
+     */
     #[\Override]
     public function filter($text, array $options = []): string {
+        if (!empty($options['stage']) && $options['stage'] !== 'post_clean') {
+            return $text;
+        }
+        if ($text === '' || stripos($text, '<img') === false || stripos($text, 'pluginfile.php') === false) {
+            return $text;
+        }
+        $filtercoursecontext = $this->context->get_course_context(false);
+        if (!$filtercoursecontext || !has_capability('filter/dixeo_imageeditor:edit', $filtercoursecontext)) {
+            return $text;
+        }
         if (!feature_gate::is_globally_enabled()) {
             return $text;
         }
         // Image editing is a Dixeo feature, so the text is left unchanged while Dixeo is off.
-        if (!\local_dixeo\external\service_factory::get_settings_config()->enabled_for($this->context)) {
-            return $text;
-        }
-        if ($text === '' || stripos($text, '<img') === false) {
-            return $text;
-        }
-        if (!empty($options['stage']) && $options['stage'] !== 'post_clean') {
+        if (!\local_dixeo\external\service_factory::get_settings_config()->enabled_for($filtercoursecontext)) {
             return $text;
         }
 
@@ -152,7 +174,7 @@ class text_filter extends \core_filters\text_filter {
             }
 
             $contenthash = $file->get_contenthash();
-            $img->setAttribute('src', file_replacer::get_current_image_url($location));
+            $img->setAttribute('src', file_replacer::append_image_rev($location->get_pluginfile_url(), $contenthash));
 
             // Successful file after a failed gen: strip stale status classes/hash so
             // content_image_pending does not re-bust to a cached error.png URL.
