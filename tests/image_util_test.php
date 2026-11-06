@@ -62,7 +62,7 @@ final class image_util_test extends \advanced_testcase {
     public function test_decode_image_base64_strips_data_url_prefix(): void {
         $png = self::fixture_png_bytes();
         $payload = 'data:image/png;base64,' . base64_encode($png);
-        $this->assertSame($png, image_util::decode_image_base64($payload));
+        $this->assertSame($png, image_util::decode_image_base64($payload, $this->courseid));
     }
 
     public function test_assert_valid_web_image_accepts_png_and_jpeg(): void {
@@ -141,8 +141,44 @@ final class image_util_test extends \advanced_testcase {
             image_util::assert_valid_web_image($png, $this->courseid);
             $this->fail('Expected moodle_exception');
         } catch (\moodle_exception $e) {
-            $this->assertSame('uploadfilelimitexceeded', $e->errorcode);
-            $this->assertSame('error', $e->module);
+            $this->assertSame('error_upload_too_large', $e->errorcode);
+            $this->assertSame('filter_dixeo_imageeditor', $e->module);
+        }
+    }
+
+    public function test_decode_refuses_an_oversized_payload_before_decoding(): void {
+        global $DB;
+
+        $DB->set_field('course', 'maxbytes', 1024, ['id' => $this->courseid]);
+        $teacher = $this->getDataGenerator()->create_and_enrol(get_course($this->courseid), 'editingteacher');
+        $this->setUser($teacher);
+
+        // Not valid base64 either: the size error proves the decoder was not reached.
+        $payload = str_repeat('!', 4 * intdiv(1024 + 2, 3) + 5);
+        try {
+            image_util::decode_image_base64($payload, $this->courseid);
+            $this->fail('Expected moodle_exception');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('error_upload_too_large', $e->errorcode);
+            $this->assertSame('filter_dixeo_imageeditor', $e->module);
+        }
+
+        $this->assertSame(1024, strlen(image_util::decode_image_base64(
+            base64_encode(str_repeat('a', 1024)),
+            $this->courseid
+        )));
+    }
+
+    public function test_admin_is_bounded_by_the_site_maximum(): void {
+        set_config('maxbytes', 1024);
+        $this->setAdminUser();
+
+        $this->assertSame(1024, image_util::get_max_upload_bytes($this->courseid));
+        try {
+            image_util::decode_image_base64(base64_encode(str_repeat('a', 2048)), $this->courseid);
+            $this->fail('Expected moodle_exception');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('error_upload_too_large', $e->errorcode);
         }
     }
 

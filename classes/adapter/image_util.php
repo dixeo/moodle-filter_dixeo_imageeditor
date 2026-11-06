@@ -16,6 +16,8 @@
 
 namespace filter_dixeo_imageeditor\adapter;
 
+use local_dixeo\util\input_limits;
+
 /**
  * Helpers for validating uploaded web images.
  *
@@ -25,9 +27,11 @@ namespace filter_dixeo_imageeditor\adapter;
  */
 final class image_util {
     /**
-     * Resolve the effective upload limit for the current user in a course.
+     * Effective upload limit in bytes for the current user in a course.
      *
-     * Matches {@see \local_dixeo\service\manual_upload_service::stage_upload_to_draft()}.
+     * Matches {@see \local_dixeo\service\manual_upload_service::stage_upload_to_draft()}. A user
+     * who may ignore file size limits is still bounded by the site maximum, which core caps at
+     * the PHP upload and post limits.
      *
      * @param int $courseid
      * @return int
@@ -38,7 +42,11 @@ final class image_util {
         $course = get_course($courseid);
         $context = \context_course::instance($courseid);
 
-        return get_user_max_upload_file_size($context, $CFG->maxbytes, $course->maxbytes);
+        $max = get_user_max_upload_file_size($context, $CFG->maxbytes, $course->maxbytes);
+        if ($max == USER_CAN_IGNORE_FILE_SIZE_LIMITS) {
+            $max = get_max_upload_file_size($CFG->maxbytes);
+        }
+        return (int) $max;
     }
 
     /**
@@ -114,10 +122,12 @@ final class image_util {
             throw new \moodle_exception($errorstring, 'filter_dixeo_imageeditor');
         }
 
-        $maxbytes = self::get_max_upload_bytes($courseid);
-        if ($maxbytes != USER_CAN_IGNORE_FILE_SIZE_LIMITS && strlen($binary) > $maxbytes) {
-            throw new \moodle_exception('uploadfilelimitexceeded', 'error');
-        }
+        input_limits::require_max_size(
+            $binary,
+            self::get_max_upload_bytes($courseid),
+            'error_upload_too_large',
+            'filter_dixeo_imageeditor'
+        );
 
         self::assert_valid_web_image_content($binary, $errorstring);
     }
@@ -125,18 +135,28 @@ final class image_util {
     /**
      * Decode a base64 image payload from the browser.
      *
-     * @param string $payload
-     * @return string
+     * The encoded length is checked against the upload limit before decoding, so an oversized
+     * payload never costs a decoded copy in memory.
+     *
+     * @param string $payload Raw base64, or a data URI.
+     * @param int $courseid Course whose upload limit applies.
+     * @return string Decoded bytes, or an empty string when the payload is empty or invalid.
+     * @throws \moodle_exception error_upload_too_large when the payload exceeds the upload limit.
      */
-    public static function decode_image_base64(string $payload): string {
+    public static function decode_image_base64(string $payload, int $courseid): string {
         $payload = trim($payload);
         if ($payload === '') {
             return '';
         }
 
-        if (strpos($payload, 'base64,') !== false) {
-            $parts = explode('base64,', $payload, 2);
-            $payload = $parts[1];
+        if (($pos = strpos($payload, 'base64,')) !== false) {
+            $payload = substr($payload, $pos + 7);
+        }
+
+        // Base64 of $max bytes, plus slack for padding and line ends.
+        $max = self::get_max_upload_bytes($courseid);
+        if (strlen($payload) > 4 * intdiv($max + 2, 3) + 4) {
+            throw new \moodle_exception('error_upload_too_large', 'filter_dixeo_imageeditor', '', display_size($max));
         }
 
         $binary = base64_decode($payload, true);

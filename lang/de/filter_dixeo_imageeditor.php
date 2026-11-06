@@ -37,6 +37,7 @@ $string['error_not_eligible'] = 'Dieses Bild kann nicht bearbeitet werden.';
 $string['error_revert_blocked'] = 'Zurücksetzen ist nicht möglich, solange ein Auftrag läuft.';
 $string['error_upload_blocked'] = 'Hochladen ist nicht möglich, solange ein KI-Bildauftrag läuft.';
 $string['error_upload_invalid_image'] = 'Die hochgeladene Datei ist kein unterstütztes Bild.';
+$string['error_upload_too_large'] = 'Das Bild ist größer als die maximale Upload-Größe ({$a}).';
 $string['eventcontentimagejobstarted'] = 'KI-Auftrag für Inhaltsbild gestartet';
 $string['eventcontentimagejobstarteddesc'] = 'Der Benutzer mit der ID \'{$a->userid}\' hat einen {$a->mode}-Auftrag ({$a->jobid}) für ein Inhaltsbild im Kurs {$a->courseid} gestartet.';
 $string['eventcontentimageupdated'] = 'Inhaltsbild aktualisiert';

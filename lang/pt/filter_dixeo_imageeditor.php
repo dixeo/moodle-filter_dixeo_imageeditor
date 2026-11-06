@@ -37,6 +37,7 @@ $string['error_not_eligible'] = 'Esta imagem não pode ser editada.';
 $string['error_revert_blocked'] = 'Não é possível reverter enquanto uma tarefa está em curso.';
 $string['error_upload_blocked'] = 'Não é possível carregar enquanto uma tarefa de imagem por IA está em curso.';
 $string['error_upload_invalid_image'] = 'O ficheiro carregado não é uma imagem suportada.';
+$string['error_upload_too_large'] = 'A imagem excede o tamanho máximo de carregamento ({$a}).';
 $string['eventcontentimagejobstarted'] = 'Tarefa de IA de imagem de conteúdo iniciada';
 $string['eventcontentimagejobstarteddesc'] = 'O utilizador com id \'{$a->userid}\' iniciou uma tarefa de {$a->mode} ({$a->jobid}) para uma imagem de conteúdo no curso {$a->courseid}.';
 $string['eventcontentimageupdated'] = 'Imagem de conteúdo atualizada';

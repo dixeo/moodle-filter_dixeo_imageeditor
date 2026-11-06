@@ -88,7 +88,7 @@ final class apply_manual_edit extends external_api {
             throw new \moodle_exception('error_manual_blocked', 'filter_dixeo_imageeditor');
         }
 
-        $binary = image_util::decode_image_base64((string) $params['image_base64']);
+        $binary = image_util::decode_image_base64((string) $params['image_base64'], $location->courseid);
         image_util::assert_valid_web_image($binary, $location->courseid, 'error_manual_invalid_image');
 
         file_replacer::apply_binary($location, $binary, (int) $USER->id, file_replacer::SOURCE_MANUAL);

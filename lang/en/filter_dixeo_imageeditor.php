@@ -37,6 +37,7 @@ $string['error_not_eligible'] = 'This image cannot be edited.';
 $string['error_revert_blocked'] = 'Cannot revert while a job is in progress.';
 $string['error_upload_blocked'] = 'Cannot upload while an AI image job is in progress.';
 $string['error_upload_invalid_image'] = 'The uploaded file is not a supported image.';
+$string['error_upload_too_large'] = 'The image is larger than the maximum upload size ({$a}).';
 $string['eventcontentimagejobstarted'] = 'Content image AI job started';
 $string['eventcontentimagejobstarteddesc'] = 'The user with id \'{$a->userid}\' started a {$a->mode} job ({$a->jobid}) for a content image in course {$a->courseid}.';
 $string['eventcontentimageupdated'] = 'Content image updated';

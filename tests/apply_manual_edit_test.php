@@ -237,8 +237,8 @@ final class apply_manual_edit_test extends \advanced_testcase {
             );
             $this->fail('Expected moodle_exception');
         } catch (\moodle_exception $e) {
-            $this->assertSame('uploadfilelimitexceeded', $e->errorcode);
-            $this->assertSame('error', $e->module);
+            $this->assertSame('error_upload_too_large', $e->errorcode);
+            $this->assertSame('filter_dixeo_imageeditor', $e->module);
         }
     }
 
@@ -267,8 +267,8 @@ final class apply_manual_edit_test extends \advanced_testcase {
             );
             $this->fail('Expected moodle_exception');
         } catch (\moodle_exception $e) {
-            $this->assertSame('uploadfilelimitexceeded', $e->errorcode);
-            $this->assertSame('error', $e->module);
+            $this->assertSame('error_upload_too_large', $e->errorcode);
+            $this->assertSame('filter_dixeo_imageeditor', $e->module);
         }
     }
 }

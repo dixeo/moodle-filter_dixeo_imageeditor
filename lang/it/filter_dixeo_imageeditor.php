@@ -37,6 +37,7 @@ $string['error_not_eligible'] = 'Questa immagine non può essere modificata.';
 $string['error_revert_blocked'] = 'Impossibile ripristinare mentre un job è in corso.';
 $string['error_upload_blocked'] = 'Impossibile caricare mentre un job immagine IA è in corso.';
 $string['error_upload_invalid_image'] = 'Il file caricato non è un\'immagine supportata.';
+$string['error_upload_too_large'] = 'L\'immagine supera la dimensione massima di caricamento ({$a}).';
 $string['eventcontentimagejobstarted'] = 'Processo IA immagine di contenuto avviato';
 $string['eventcontentimagejobstarteddesc'] = 'L\'utente con id \'{$a->userid}\' ha avviato un processo {$a->mode} ({$a->jobid}) per un\'immagine di contenuto nel corso {$a->courseid}.';
 $string['eventcontentimageupdated'] = 'Immagine di contenuto aggiornata';

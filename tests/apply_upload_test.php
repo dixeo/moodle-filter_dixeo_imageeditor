@@ -225,8 +225,36 @@ final class apply_upload_test extends \advanced_testcase {
             );
             $this->fail('Expected moodle_exception');
         } catch (\moodle_exception $e) {
-            $this->assertSame('uploadfilelimitexceeded', $e->errorcode);
-            $this->assertSame('error', $e->module);
+            $this->assertSame('error_upload_too_large', $e->errorcode);
+            $this->assertSame('filter_dixeo_imageeditor', $e->module);
         }
+    }
+
+    public function test_apply_upload_refuses_an_oversized_payload_before_decoding(): void {
+        global $DB;
+
+        [$location, $courseid] = $this->create_page_image_location();
+        $originalhash = $location->get_stored_file()->get_contenthash();
+        $DB->set_field('course', 'maxbytes', 1024, ['id' => $courseid]);
+        $teacher = $this->getDataGenerator()->create_and_enrol(get_course($courseid), 'editingteacher');
+        $this->setUser($teacher);
+
+        try {
+            apply_upload::execute(
+                $location->contextid,
+                $location->component,
+                $location->filearea,
+                $location->itemid,
+                $location->filepath,
+                $location->filename,
+                $courseid,
+                str_repeat('!', 2000)
+            );
+            $this->fail('Expected moodle_exception');
+        } catch (\moodle_exception $e) {
+            // Invalid base64 too: the size error shows the decoder was not reached.
+            $this->assertSame('error_upload_too_large', $e->errorcode);
+        }
+        $this->assertSame($originalhash, $location->get_stored_file()->get_contenthash());
     }
 }

@@ -37,6 +37,7 @@ $string['error_not_eligible'] = 'Cette image ne peut pas être modifiée.';
 $string['error_revert_blocked'] = 'Impossible de revenir en arrière pendant qu\'une tâche est en cours.';
 $string['error_upload_blocked'] = 'Impossible de téléverser pendant qu\'une tâche d\'image IA est en cours.';
 $string['error_upload_invalid_image'] = 'Le fichier téléversé n\'est pas une image prise en charge.';
+$string['error_upload_too_large'] = 'L\'image dépasse la taille maximale de téléversement ({$a}).';
 $string['eventcontentimagejobstarted'] = 'Tâche IA d\'image de contenu démarrée';
 $string['eventcontentimagejobstarteddesc'] = 'L\'utilisateur d\'id \'{$a->userid}\' a démarré une tâche {$a->mode} ({$a->jobid}) pour une image de contenu dans le cours {$a->courseid}.';
 $string['eventcontentimageupdated'] = 'Image de contenu mise à jour';
