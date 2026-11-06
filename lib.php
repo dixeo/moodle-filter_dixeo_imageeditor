@@ -75,7 +75,7 @@ function filter_dixeo_imageeditor_pluginfile(
         (string) $version->filepath,
         (string) $version->filename
     );
-    if (!$targetfile) {
+    if (!$targetfile || !\filter_dixeo_imageeditor\adapter\eligibility::is_eligible_stored_file($targetfile)) {
         return false;
     }
 
@@ -96,5 +96,7 @@ function filter_dixeo_imageeditor_pluginfile(
         return false;
     }
 
-    send_stored_file($file, 60 * 60, 0, $forcedownload, $options);
+    // Only raster images are shown inline; anything else is downloaded.
+    $inline = \filter_dixeo_imageeditor\adapter\image_util::is_raster_web_mimetype((string) $file->get_mimetype());
+    send_stored_file($file, HOURSECS, 0, $forcedownload || !$inline, $options);
 }

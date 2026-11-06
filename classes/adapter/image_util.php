@@ -57,6 +57,18 @@ final class image_util {
     }
 
     /**
+     * Whether a MIME type is a raster web image.
+     *
+     * SVG is excluded: it can embed scripts and the edit capability only declares RISK_SPAM.
+     *
+     * @param string $mimetype MIME type.
+     * @return bool
+     */
+    public static function is_raster_web_mimetype(string $mimetype): bool {
+        return $mimetype !== 'image/svg+xml' && file_mimetype_in_typegroup($mimetype, 'web_image');
+    }
+
+    /**
      * Validate image bytes for content type only (no upload size limit).
      *
      * Used by all apply paths including AI job results. Rejects SVG because it
@@ -76,11 +88,7 @@ final class image_util {
 
         $finfo = new \finfo(FILEINFO_MIME_TYPE);
         $mimetype = $finfo->buffer($binary);
-        if (!is_string($mimetype) || !file_mimetype_in_typegroup($mimetype, 'web_image')) {
-            throw new \moodle_exception($errorstring, 'filter_dixeo_imageeditor');
-        }
-
-        if ($mimetype === 'image/svg+xml') {
+        if (!is_string($mimetype) || !self::is_raster_web_mimetype($mimetype)) {
             throw new \moodle_exception($errorstring, 'filter_dixeo_imageeditor');
         }
 

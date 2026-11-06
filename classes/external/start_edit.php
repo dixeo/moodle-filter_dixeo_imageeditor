@@ -27,7 +27,7 @@ use local_dixeo\dto\job_binding_metadata;
 use local_dixeo\repository\image\job_repository;
 use local_dixeo\external\service_factory;
 use local_dixeo\service\image_generation_service;
-use local_dixeo\service\image\pluginfile_helper;
+use local_dixeo\service\image\image_bounds;
 
 /**
  * Start a content image edit job.
@@ -108,15 +108,12 @@ final class start_edit extends external_api {
 
         $quality = self::validate_image_quality($params['quality']);
 
-        if (!$location->get_stored_file()) {
+        $file = $location->get_stored_file();
+        if (!$file) {
             throw new \moodle_exception('error_not_eligible', 'filter_dixeo_imageeditor');
         }
-
-        $imageurl = $location->get_pluginfile_url();
-        $b64 = pluginfile_helper::image_url_to_base64($imageurl);
-
-        $file = $location->get_stored_file();
-        $binding = $file ? job_binding_metadata::for_stored_file($file) : null;
+        $b64 = image_bounds::encode_edit_source($file);
+        $binding = job_binding_metadata::for_stored_file($file);
 
         $imageservice = service_factory::get_image_generation_service('filter_dixeo_imageeditor');
         $result = $imageservice->submit_content_image_edit_job(

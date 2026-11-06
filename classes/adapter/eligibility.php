@@ -19,11 +19,30 @@ namespace filter_dixeo_imageeditor\adapter;
 /**
  * Determines whether a stored file is eligible for AI editing.
  *
+ * Only raster web images in content areas that course editors author are eligible: the
+ * teacher-authored editor fields that pass through format_text(), plus the slideshow featured
+ * image and the tiles photo, which this plugin edits from its own controls. Submissions, posts,
+ * attachments, backups, user and question files are never eligible.
+ *
  * @package    filter_dixeo_imageeditor
  * @copyright  2026 Dixeo
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class eligibility {
+    /** @var array<string, string[]> Allowed file areas by component, in addition to any mod_* intro. */
+    private const ALLOWED_AREAS = [
+        'course' => ['section', 'summary'],
+        'mod_page' => ['content'],
+        'mod_book' => ['chapter'],
+        'mod_lesson' => ['page_contents'],
+        'mod_slideshow' => ['content', 'image'],
+        'block_html' => ['content'],
+        'format_tiles' => ['tilephoto'],
+    ];
+
+    /** @var string[] Activity modules whose intro is not edited here. */
+    private const EXCLUDED_MODULES = ['mod_h5pactivity'];
+
     /**
      * Whether a stored file is eligible for Dixeo editing.
      *
@@ -40,21 +59,35 @@ final class eligibility {
         if ((int) $file->get_referencefileid() > 0) {
             return false;
         }
+        if (!self::is_allowed_area($file->get_component(), $file->get_filearea())) {
+            return false;
+        }
+        if (!image_util::is_raster_web_mimetype((string) $file->get_mimetype())) {
+            return false;
+        }
 
         $context = \context::instance_by_id($file->get_contextid(), IGNORE_MISSING);
         if (!$context) {
             return false;
         }
+        return in_array((int) $context->contextlevel, [CONTEXT_COURSE, CONTEXT_MODULE, CONTEXT_BLOCK], true);
+    }
 
-        if ($context->contextlevel === CONTEXT_SYSTEM) {
+    /**
+     * Whether a component and file area hold editor-authored course content.
+     *
+     * @param string $component Frankenstyle component of the file.
+     * @param string $filearea File area of the file.
+     * @return bool
+     */
+    public static function is_allowed_area(string $component, string $filearea): bool {
+        if (in_array($component, self::EXCLUDED_MODULES, true)) {
             return false;
         }
-
-        if (!in_array($context->contextlevel, [CONTEXT_COURSE, CONTEXT_MODULE, CONTEXT_BLOCK, CONTEXT_COURSECAT], true)) {
-            return false;
+        if (str_starts_with($component, 'mod_') && $filearea === 'intro') {
+            return true;
         }
-
-        return !self::is_denied_component_filearea($file->get_component(), $file->get_filearea());
+        return in_array($filearea, self::ALLOWED_AREAS[$component] ?? [], true);
     }
 
     /**
@@ -69,51 +102,5 @@ final class eligibility {
             return null;
         }
         return $file;
-    }
-
-    /**
-     * Whether the component and file area pair is denied.
-     *
-     * Course overview files and Dixeo chapter covers stay excluded. Tiles
-     * section photos are the exception: the course page editor may upload,
-     * generate, and replace them, including when the tile still shows an icon.
-     *
-     * @param string $component
-     * @param string $filearea
-     * @return bool True when the file must be excluded.
-     */
-    public static function is_denied_component_filearea(string $component, string $filearea): bool {
-        if ($component === 'format_tiles' && $filearea === 'tilephoto') {
-            return false;
-        }
-
-        $denylist = [
-            ['course', 'overviewfiles'],
-            ['format_dixeo', 'chapterimage'],
-            ['block_dixeo_designer', 'generated_images'],
-            ['user', 'icon'],
-            ['user', 'profile'],
-            ['user', 'newicon'],
-        ];
-
-        foreach ($denylist as [$comp, $area]) {
-            if ($component === $comp && $filearea === $area) {
-                return true;
-            }
-        }
-
-        if (strpos($component, 'theme_') === 0) {
-            return true;
-        }
-
-        if ($component === 'mod_h5pactivity') {
-            return true;
-        }
-
-        if ($component === 'contentbank' || strpos($filearea, 'h5p') !== false) {
-            return true;
-        }
-
-        return false;
     }
 }
