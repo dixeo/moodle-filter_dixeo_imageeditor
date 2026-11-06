@@ -104,7 +104,7 @@ final class get_location_status_test extends \advanced_testcase {
      * A co-teacher's poll applies the owner's completed job without switching the session user.
      */
     public function test_poll_by_another_editor_applies_for_the_job_owner(): void {
-        global $DB, $USER;
+        global $DB, $PAGE, $USER;
 
         [$location, $courseid] = $this->create_page_image_location();
         $course = get_course($courseid);
@@ -153,6 +153,8 @@ final class get_location_status_test extends \advanced_testcase {
         };
         \local_dixeo\service\image\apply\registry::set_modal_handler($handler);
 
+        // The enrolment welcome email set up the page theme; the service needs a fresh page.
+        $PAGE = new \moodle_page();
         $this->setUser($poller);
         get_location_status::execute(
             $location->contextid,
