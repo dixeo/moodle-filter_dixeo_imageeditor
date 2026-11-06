@@ -45,8 +45,16 @@ final class file_replacer {
     /** @var string Archived version created by upload. */
     public const SOURCE_UPLOAD = 'uploaded';
 
+    /** @var int Archived versions kept per image; older ones are deleted when a new one is archived. */
+    public const MAX_VERSIONS_PER_LOCATION = 20;
+
+    /** @var int Seconds an archived version is kept, unless it matches the current image. */
+    public const MAX_VERSION_AGE = 365 * DAYSECS;
+
     /**
-     * Return version history rows for a content image location.
+     * Return version history rows for a content image location, newest first.
+     *
+     * At most {@see self::MAX_VERSIONS_PER_LOCATION} rows are returned.
      *
      * @param location $location
      * @return array<int, array<string, mixed>>
@@ -57,7 +65,10 @@ final class file_replacer {
         $records = $DB->get_records(
             'filter_dixeo_imageeditor_version',
             ['locationhash' => $location->hash()],
-            'timecreated DESC, id DESC'
+            'timecreated DESC, id DESC',
+            '*',
+            0,
+            self::MAX_VERSIONS_PER_LOCATION
         );
         $history = [];
         foreach ($records as $record) {
@@ -243,7 +254,42 @@ final class file_replacer {
         $fs = get_file_storage();
         $fs->create_file_from_string($record, $file->get_content());
 
+        self::prune_history($location, $contenthash);
+
         return (int) $versionid;
+    }
+
+    /**
+     * Delete archived versions beyond the newest {@see self::MAX_VERSIONS_PER_LOCATION}.
+     *
+     * The version that matches the image's current content is never deleted.
+     *
+     * @param location $location Image whose history is pruned.
+     * @param string $currenthash Content hash of the image's current bytes.
+     * @return void
+     */
+    private static function prune_history(location $location, string $currenthash): void {
+        global $DB;
+
+        $records = $DB->get_records(
+            'filter_dixeo_imageeditor_version',
+            ['locationhash' => $location->hash()],
+            'timecreated DESC, id DESC',
+            'id, contenthash'
+        );
+        $excess = array_slice($records, self::MAX_VERSIONS_PER_LOCATION);
+        if ($excess === []) {
+            return;
+        }
+        $fs = get_file_storage();
+        $systemcontextid = \context_system::instance()->id;
+        foreach ($excess as $record) {
+            if ((string) $record->contenthash === $currenthash) {
+                continue;
+            }
+            $fs->delete_area_files($systemcontextid, 'filter_dixeo_imageeditor', self::FILEAREA_HISTORY, (int) $record->id);
+            $DB->delete_records('filter_dixeo_imageeditor_version', ['id' => $record->id]);
+        }
     }
 
     /**
@@ -338,9 +384,11 @@ final class file_replacer {
             return self::get_current_image_url($location);
         }
 
+        // Read first: archiving the current image may prune the version being restored.
+        $content = $historyfile->get_content();
         self::archive_current($location, self::SOURCE_REVERTED, $userid);
 
-        self::replace_file_content($target, $historyfile->get_content(), $userid);
+        self::replace_file_content($target, $content, $userid);
 
         content_image_updated::create_from_location($location, $userid, self::SOURCE_REVERTED)->trigger();
 

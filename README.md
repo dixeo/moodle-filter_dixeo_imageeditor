@@ -46,7 +46,7 @@ No Composer install step is required.
 
 ## Privacy
 
-The filter stores version-history metadata (filename, source, the user who saved the version, and the time) and archived image files.
+The filter stores version-history metadata (filename, source, the user who saved the version, and the time) and archived image files. At most 20 versions are kept per image, and each version is kept for up to 365 days unless it matches the current image. The scheduled task "Clean up Dixeo image version history" removes expired versions and the history of images that no longer exist.
 
 Generate and AI edit transfer the prompt and image bytes to the Dixeo API through `local_dixeo`. That external location is declared in `classes/privacy/provider.php`.
 

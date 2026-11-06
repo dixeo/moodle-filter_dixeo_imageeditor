@@ -24,9 +24,10 @@ use filter_dixeo_imageeditor\adapter\image_util;
  * Delete version history rows and archived files that are no longer kept.
  *
  * A version is removed when its target image no longer exists (deleted file, module or
- * course), or when the target is no longer an eligible image (its area is not edited here,
- * or it is not a raster image). Otherwise the history would accumulate in the
- * system-context file storage.
+ * course), when the target is no longer an eligible image (its area is not edited here,
+ * or it is not a raster image), or when it is older than
+ * {@see file_replacer::MAX_VERSION_AGE} and does not match the current image. Otherwise the
+ * history would accumulate in the system-context file storage.
  *
  * @package    filter_dixeo_imageeditor
  * @copyright  2026 Dixeo
@@ -54,6 +55,7 @@ class cleanup_version_history extends \core\task\scheduled_task {
 
         $fs = get_file_storage();
         $systemcontextid = \context_system::instance()->id;
+        $expiry = \core\di::get(\core\clock::class)->time() - file_replacer::MAX_VERSION_AGE;
 
         $sql = "SELECT v.id, v.component, v.filearea, v.contenthash, v.timecreated,
                        f.id AS fileid, f.mimetype, f.contenthash AS currenthash
@@ -64,7 +66,7 @@ class cleanup_version_history extends \core\task\scheduled_task {
               ORDER BY v.id ASC";
         $rs = $DB->get_recordset_sql($sql);
         foreach ($rs as $version) {
-            if (!$this->must_delete($version)) {
+            if (!$this->must_delete($version, $expiry)) {
                 continue;
             }
             $fs->delete_area_files(
@@ -82,15 +84,19 @@ class cleanup_version_history extends \core\task\scheduled_task {
      * Whether a version row joined with its target file is no longer kept.
      *
      * @param \stdClass $version Version row with fileid, mimetype and currenthash of the target.
+     * @param int $expiry Versions created before this time expire unless they match the current image.
      * @return bool
      */
-    private function must_delete(\stdClass $version): bool {
+    private function must_delete(\stdClass $version, int $expiry): bool {
         if (empty($version->fileid)) {
             return true;
         }
         if (!eligibility::is_allowed_area((string) $version->component, (string) $version->filearea)) {
             return true;
         }
-        return !image_util::is_raster_web_mimetype((string) $version->mimetype);
+        if (!image_util::is_raster_web_mimetype((string) $version->mimetype)) {
+            return true;
+        }
+        return (int) $version->timecreated < $expiry && (string) $version->contenthash !== (string) $version->currenthash;
     }
 }
