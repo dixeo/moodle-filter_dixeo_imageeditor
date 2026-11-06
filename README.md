@@ -15,9 +15,9 @@ Without a Dixeo API key, generate and AI edit are unavailable. Crop, adjust, and
 
 ## Requirements
 
-- Moodle 4.5+ (`$plugin->requires` is `2024100700`)
+- Moodle 4.5 (`$plugin->requires` is `2024100700`, `$plugin->supported` is `[405, 405]`)
 - PHP 8.1+
-- [local_dixeo](https://github.com/dixeo/moodle-local_dixeo) **1.10.2** or later (`$plugin->dependencies` requires version `2026092800`)
+- [local_dixeo](https://github.com/dixeo/moodle-local_dixeo) version `2026110602` or later (`$plugin->dependencies`)
 - A Dixeo API key for generate and AI edit
 
 ## Acquiring a Dixeo API key
