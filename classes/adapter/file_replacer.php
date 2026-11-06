@@ -206,12 +206,15 @@ final class file_replacer {
     /**
      * Archive the current file bytes into version history.
      *
+     * History is not pruned here: callers prune after the new bytes are written, so the
+     * version matching the live image is known and kept.
+     *
      * @param location $location
      * @param string $source
      * @param int $userid
      * @return int|null Version row id, or null when content is already archived
      */
-    public static function archive_current(location $location, string $source, int $userid): ?int {
+    private static function archive_current(location $location, string $source, int $userid): ?int {
         global $DB;
 
         $file = $location->get_stored_file();
@@ -253,8 +256,6 @@ final class file_replacer {
 
         $fs = get_file_storage();
         $fs->create_file_from_string($record, $file->get_content());
-
-        self::prune_history($location, $contenthash);
 
         return (int) $versionid;
     }
@@ -324,21 +325,48 @@ final class file_replacer {
      * @return void
      */
     public static function apply_binary(location $location, string $binary, int $userid, string $source): void {
-        // AI job results skip the upload externals; validate here so every write
-        // path rejects SVG and non-images before course files are replaced.
-        image_util::assert_valid_web_image_content($binary);
-
         $file = $location->get_stored_file();
         if (!$file) {
             // Icon tiles have no photo yet. The first image creates the file
             // and records it as the section photo, which replaces the icon.
+            image_util::assert_valid_web_image_content($binary);
             tiles_section_photo::create($location, $binary, $userid);
             content_image_updated::create_from_location($location, $userid, $source)->trigger();
             return;
         }
 
+        self::replace_with_history($location, $file, $binary, $source, $userid);
+    }
+
+    /**
+     * Validate new image bytes, archive the current image, write the bytes and prune history.
+     *
+     * AI job results and restored versions skip the upload externals; the bytes are validated
+     * here so every write path rejects SVG and non-images before course files are replaced.
+     * History is pruned only after the write, keeping the version that matches the live image.
+     *
+     * @param location $location Image being replaced.
+     * @param \stored_file $target Stored file of $location.
+     * @param string $binary New image bytes.
+     * @param string $source Version source recorded for the archived image.
+     * @param int $userid User making the change.
+     * @param string $errorstring Language string key when the bytes are not a valid image.
+     * @return void
+     * @throws \moodle_exception $errorstring, or local_dixeo error:image_dimensions.
+     */
+    private static function replace_with_history(
+        location $location,
+        \stored_file $target,
+        string $binary,
+        string $source,
+        int $userid,
+        string $errorstring = 'error_upload_invalid_image'
+    ): void {
+        $mimetype = image_util::assert_valid_web_image_content($binary, $errorstring);
+
         self::archive_current($location, $source, $userid);
-        self::replace_file_content($file, $binary, $userid);
+        in_place_writer::replace_content($target, $binary, $userid, $mimetype);
+        self::prune_history($location, $target->get_contenthash());
 
         content_image_updated::create_from_location($location, $userid, $source)->trigger();
     }
@@ -384,13 +412,9 @@ final class file_replacer {
             return self::get_current_image_url($location);
         }
 
-        // Read first: archiving the current image may prune the version being restored.
+        // Restored bytes are validated like any new image: older history was archived unchecked.
         $content = $historyfile->get_content();
-        self::archive_current($location, self::SOURCE_REVERTED, $userid);
-
-        self::replace_file_content($target, $content, $userid);
-
-        content_image_updated::create_from_location($location, $userid, self::SOURCE_REVERTED)->trigger();
+        self::replace_with_history($location, $target, $content, self::SOURCE_REVERTED, $userid, 'error_not_eligible');
 
         return self::get_current_image_url($location);
     }
@@ -409,18 +433,6 @@ final class file_replacer {
             'locationhash' => $location->hash(),
             'contenthash' => $contenthash,
         ]);
-    }
-
-    /**
-     * Replace stored file content in place for the given user.
-     *
-     * @param \stored_file $file
-     * @param string $binary
-     * @param int $userid
-     * @return void
-     */
-    private static function replace_file_content(\stored_file $file, string $binary, int $userid): void {
-        in_place_writer::replace_content($file, $binary, $userid);
     }
 
     /**

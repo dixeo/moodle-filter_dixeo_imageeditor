@@ -86,13 +86,13 @@ final class image_util {
      *
      * @param string $binary
      * @param string $errorstring Language string key when validation fails.
-     * @return void
+     * @return string MIME type detected from the bytes.
      * @throws \moodle_exception $errorstring, or local_dixeo error:image_dimensions.
      */
     public static function assert_valid_web_image_content(
         string $binary,
         string $errorstring = 'error_upload_invalid_image'
-    ): void {
+    ): string {
         if ($binary === '') {
             throw new \moodle_exception($errorstring, 'filter_dixeo_imageeditor');
         }
@@ -108,6 +108,8 @@ final class image_util {
             throw new \moodle_exception($errorstring, 'filter_dixeo_imageeditor');
         }
         image_bounds::require_display_size((int) $size[0], (int) $size[1]);
+
+        return $mimetype;
     }
 
     /**

@@ -25,9 +25,9 @@ use filter_dixeo_imageeditor\adapter\image_util;
  *
  * A version is removed when its target image no longer exists (deleted file, module or
  * course), when the target is no longer an eligible image (its area is not edited here,
- * or it is not a raster image), or when it is older than
- * {@see file_replacer::MAX_VERSION_AGE} and does not match the current image. Otherwise the
- * history would accumulate in the system-context file storage.
+ * or it is not a raster image), when its archived file is not a raster image, or when it is
+ * older than {@see file_replacer::MAX_VERSION_AGE} and does not match the current image.
+ * Otherwise the history would accumulate in the system-context file storage.
  *
  * @package    filter_dixeo_imageeditor
  * @copyright  2026 Dixeo
@@ -46,7 +46,7 @@ class cleanup_version_history extends \core\task\scheduled_task {
     /**
      * Remove version history rows and files that are no longer kept.
      *
-     * Every version is read with its target file in one query.
+     * Every version is read with its target file and its archived file in one query.
      *
      * @return void
      */
@@ -58,13 +58,23 @@ class cleanup_version_history extends \core\task\scheduled_task {
         $expiry = \core\di::get(\core\clock::class)->time() - file_replacer::MAX_VERSION_AGE;
 
         $sql = "SELECT v.id, v.component, v.filearea, v.contenthash, v.timecreated,
-                       f.id AS fileid, f.mimetype, f.contenthash AS currenthash
+                       f.id AS fileid, f.mimetype, f.contenthash AS currenthash,
+                       h.id AS blobid, h.mimetype AS blobmimetype
                   FROM {filter_dixeo_imageeditor_version} v
              LEFT JOIN {files} f ON f.contextid = v.contextid AND f.component = v.component
                                 AND f.filearea = v.filearea AND f.itemid = v.itemid
                                 AND f.filepath = v.filepath AND f.filename = v.filename
+             LEFT JOIN {files} h ON h.contextid = :syscontextid AND h.component = :component
+                                AND h.filearea = :historyarea AND h.itemid = v.id
+                                AND h.filename <> :dot
               ORDER BY v.id ASC";
-        $rs = $DB->get_recordset_sql($sql);
+        $params = [
+            'syscontextid' => $systemcontextid,
+            'component' => 'filter_dixeo_imageeditor',
+            'historyarea' => file_replacer::FILEAREA_HISTORY,
+            'dot' => '.',
+        ];
+        $rs = $DB->get_recordset_sql($sql, $params);
         foreach ($rs as $version) {
             if (!$this->must_delete($version, $expiry)) {
                 continue;
@@ -83,7 +93,8 @@ class cleanup_version_history extends \core\task\scheduled_task {
     /**
      * Whether a version row joined with its target file is no longer kept.
      *
-     * @param \stdClass $version Version row with fileid, mimetype and currenthash of the target.
+     * @param \stdClass $version Version row with fileid, mimetype and currenthash of the target,
+     *     and blobid and blobmimetype of the archived file.
      * @param int $expiry Versions created before this time expire unless they match the current image.
      * @return bool
      */
@@ -95,6 +106,10 @@ class cleanup_version_history extends \core\task\scheduled_task {
             return true;
         }
         if (!image_util::is_raster_web_mimetype((string) $version->mimetype)) {
+            return true;
+        }
+        // A row without a blob may be mid-archive; revert refuses it until the blob exists.
+        if (!empty($version->blobid) && !image_util::is_raster_web_mimetype((string) $version->blobmimetype)) {
             return true;
         }
         return (int) $version->timecreated < $expiry && (string) $version->contenthash !== (string) $version->currenthash;

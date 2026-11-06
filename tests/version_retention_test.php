@@ -175,4 +175,116 @@ final class version_retention_test extends \advanced_testcase {
         $task->execute();
         $this->assertSame($onelocation, $DB->perf_get_reads() - $reads);
     }
+
+    /**
+     * Fill a location with exactly the capped number of versions, the original image being the oldest.
+     *
+     * @return array{0: location, 1: \stdClass} Location and the original image's version row.
+     */
+    private function create_full_history(): array {
+        global $DB, $USER;
+
+        [$location, ] = $this->create_location();
+        $original = $location->get_stored_file()->get_contenthash();
+        for ($i = 1; $i <= file_replacer::MAX_VERSIONS_PER_LOCATION; $i++) {
+            file_replacer::apply_binary($location, self::png($i), (int) $USER->id, file_replacer::SOURCE_UPLOAD);
+        }
+        $this->assertSame(file_replacer::MAX_VERSIONS_PER_LOCATION, $DB->count_records(self::TABLE));
+        $oldest = $DB->get_records(self::TABLE, null, 'timecreated ASC, id ASC', '*', 0, 1);
+        $oldest = reset($oldest);
+        $this->assertSame($original, $oldest->contenthash);
+        return [$location, $oldest];
+    }
+
+    /**
+     * Reverting to the oldest version of a full history keeps that version, which is now the live image.
+     */
+    public function test_revert_to_oldest_version_keeps_it_in_history(): void {
+        global $DB, $USER;
+
+        [$location, $oldest] = $this->create_full_history();
+
+        file_replacer::revert_to_version($location, (int) $oldest->id, (int) $USER->id);
+
+        $this->assertSame($oldest->contenthash, $location->get_stored_file()->get_contenthash());
+        $this->assertTrue($DB->record_exists(self::TABLE, ['id' => $oldest->id]));
+        $this->assertLessThanOrEqual(file_replacer::MAX_VERSIONS_PER_LOCATION + 1, $DB->count_records(self::TABLE));
+    }
+
+    /**
+     * A write that fails after archiving prunes nothing.
+     */
+    public function test_failed_write_prunes_no_history(): void {
+        global $DB;
+
+        [$location, $oldest] = $this->create_full_history();
+        $before = array_keys($DB->get_records(self::TABLE, null, 'id ASC', 'id'));
+        $live = $location->get_stored_file()->get_contenthash();
+        $nouser = (int) $DB->get_field_sql('SELECT MAX(id) FROM {user}') + 1000;
+
+        try {
+            file_replacer::revert_to_version($location, (int) $oldest->id, $nouser);
+            $this->fail('Expected an exception from the write');
+        } catch (\moodle_exception $e) {
+            $this->assertInstanceOf(\dml_missing_record_exception::class, $e);
+        }
+
+        $this->assertSame($live, $location->get_stored_file()->get_contenthash());
+        $after = array_keys($DB->get_records(self::TABLE, null, 'id ASC', 'id'));
+        $this->assertSame([], array_diff($before, $after));
+    }
+
+    /**
+     * Archived non-raster files are removed by the cleanup; raster history of the same image stays.
+     */
+    public function test_cleanup_removes_non_raster_history_blobs(): void {
+        global $DB, $USER;
+
+        [$location, ] = $this->create_location();
+        file_replacer::apply_binary($location, self::png(1), (int) $USER->id, file_replacer::SOURCE_UPLOAD);
+        $raster = $DB->get_record(self::TABLE, [], '*', MUST_EXIST);
+        $svg = $this->insert_version_blob($location, '<svg xmlns="http://www.w3.org/2000/svg"/>', 'image/svg+xml');
+        $pdf = $this->insert_version_blob($location, '%PDF-1.4 legacy', 'application/pdf');
+        $this->assertSame(3, $this->count_blobs());
+
+        (new cleanup_version_history())->execute();
+
+        $this->assertTrue($DB->record_exists(self::TABLE, ['id' => $raster->id]));
+        $this->assertFalse($DB->record_exists(self::TABLE, ['id' => $svg]));
+        $this->assertFalse($DB->record_exists(self::TABLE, ['id' => $pdf]));
+        $this->assertSame(1, $this->count_blobs());
+    }
+
+    /**
+     * Insert a version row and its archived blob directly, as history from older releases may hold.
+     *
+     * @param location $location Image the version belongs to.
+     * @param string $bytes Archived bytes.
+     * @param string $mimetype MIME type recorded for the blob.
+     * @return int Version id.
+     */
+    private function insert_version_blob(location $location, string $bytes, string $mimetype): int {
+        global $DB, $USER;
+
+        $now = time();
+        $fields = $location->to_record_fields();
+        unset($fields['courseid']);
+        $versionid = (int) $DB->insert_record(self::TABLE, (object) array_merge($fields, [
+            'contenthash' => sha1($bytes),
+            'source' => file_replacer::SOURCE_UPLOAD,
+            'usermodified' => (int) $USER->id,
+            'timecreated' => $now,
+        ]));
+        get_file_storage()->create_file_from_string([
+            'contextid' => \context_system::instance()->id,
+            'component' => 'filter_dixeo_imageeditor',
+            'filearea' => file_replacer::FILEAREA_HISTORY,
+            'itemid' => $versionid,
+            'filepath' => '/' . $location->contextid . '/' . $location->hash() . '/',
+            'filename' => 'version-' . $versionid . '-' . $now . '.bin',
+            'userid' => (int) $USER->id,
+            'mimetype' => $mimetype,
+        ], $bytes);
+        return $versionid;
+    }
 }
