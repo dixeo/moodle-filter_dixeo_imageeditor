@@ -132,14 +132,15 @@ final class image_dimensions_test extends \advanced_testcase {
         $this->assertLessThan(1048576, strlen($bomb));
         $hash = $this->location->get_stored_file()->get_contenthash();
 
-        foreach ([
+        $calls = [
             fn() => $this->upload($bomb),
             fn() => file_replacer::apply_job_result(
                 $this->location,
                 ['image_base64' => base64_encode($bomb)],
                 (int) get_admin()->id
             ),
-        ] as $call) {
+        ];
+        foreach ($calls as $call) {
             try {
                 $call();
                 $this->fail('Expected error:image_dimensions');
