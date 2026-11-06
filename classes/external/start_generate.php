@@ -28,6 +28,7 @@ use local_dixeo\dto\job_binding_metadata;
 use local_dixeo\repository\image\job_repository;
 use local_dixeo\external\service_factory;
 use local_dixeo\service\image_generation_service;
+use local_dixeo\util\input_limits;
 
 /**
  * Start a content image generate job.
@@ -48,7 +49,7 @@ final class start_generate extends external_api {
         $location = self::location_parameters_definition();
         return new external_function_parameters(array_merge($location->keys, [
             'prompt' => new external_value(PARAM_RAW, 'User prompt', VALUE_REQUIRED),
-            'size' => new external_value(PARAM_TEXT, 'Image size', VALUE_DEFAULT, image_generation_service::DEFAULT_SIZE),
+            'size' => new external_value(PARAM_ALPHANUMEXT, 'Image size', VALUE_DEFAULT, image_generation_service::DEFAULT_SIZE),
             'quality' => new external_value(PARAM_ALPHA, 'Quality', VALUE_DEFAULT, image_generation_service::DEFAULT_QUALITY),
         ]));
     }
@@ -96,6 +97,12 @@ final class start_generate extends external_api {
         ]);
 
         $location = self::validate_location($params);
+        input_limits::require_max_chars(
+            trim($params['prompt']),
+            input_limits::MAX_IMAGE_PROMPT_CHARS,
+            'error:prompt_too_long',
+            'local_dixeo'
+        );
         feature_gate::require_content_generate($location->courseid);
 
         if (trim($params['prompt']) === '') {

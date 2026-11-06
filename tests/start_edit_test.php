@@ -181,4 +181,56 @@ final class start_edit_test extends \advanced_testcase {
         $this->assertSame(job_repository::STATUS_PENDING, $result['status']);
         $this->assertTrue(job_repository::has_blocking_job($location));
     }
+
+    /**
+     * Text one character over the image limit is refused before the image service is called.
+     */
+    public function test_start_edit_refuses_text_over_the_limit(): void {
+        [$location, $courseid] = $this->create_page_image_location();
+        $mock = $this->createMock(image_generation_service::class);
+        $mock->expects($this->never())->method('submit_content_image_edit_job');
+        service_factory::set_test_image_generation_service($mock);
+
+        try {
+            start_edit::execute(
+                $location->contextid,
+                $location->component,
+                $location->filearea,
+                $location->itemid,
+                $location->filepath,
+                $location->filename,
+                $courseid,
+                str_repeat('a', \local_dixeo\util\input_limits::MAX_IMAGE_INSTRUCTIONS_CHARS + 1)
+            );
+            $this->fail('Expected moodle_exception');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('error:instructions_too_long', $e->errorcode);
+            $this->assertSame('local_dixeo', $e->module);
+        }
+    }
+
+    /**
+     * Text of exactly the image limit is submitted.
+     */
+    public function test_start_edit_accepts_text_at_the_limit(): void {
+        [$location, $courseid] = $this->create_page_image_location();
+        $mock = $this->createMock(image_generation_service::class);
+        $mock->expects($this->once())
+            ->method('submit_content_image_edit_job')
+            ->willReturn(operation_result::pending('remote-limit-2', 'pending', 0));
+        service_factory::set_test_image_generation_service($mock);
+
+        $result = start_edit::execute(
+            $location->contextid,
+            $location->component,
+            $location->filearea,
+            $location->itemid,
+            $location->filepath,
+            $location->filename,
+            $courseid,
+            str_repeat('a', \local_dixeo\util\input_limits::MAX_IMAGE_INSTRUCTIONS_CHARS)
+        );
+
+        $this->assertSame('remote-limit-2', $result['jobid']);
+    }
 }
