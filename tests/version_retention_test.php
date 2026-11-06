@@ -235,6 +235,112 @@ final class version_retention_test extends \advanced_testcase {
     }
 
     /**
+     * The next change after reverting to the oldest version keeps that image as the newest version.
+     */
+    public function test_change_after_revert_to_oldest_keeps_previous_image(): void {
+        global $DB, $USER;
+
+        [$location, $oldest] = $this->create_full_history();
+        file_replacer::revert_to_version($location, (int) $oldest->id, (int) $USER->id);
+
+        file_replacer::apply_binary($location, self::png(500), (int) $USER->id, file_replacer::SOURCE_EDITED);
+
+        $this->assert_newest_version_with_blob($location, $oldest->contenthash);
+        $this->assertSame(file_replacer::MAX_VERSIONS_PER_LOCATION, $DB->count_records(self::TABLE));
+        $this->assertSame(file_replacer::MAX_VERSIONS_PER_LOCATION, $this->count_blobs());
+    }
+
+    /**
+     * Re-uploading the oldest image and then changing it keeps the re-uploaded image as the newest version.
+     */
+    public function test_reupload_of_oldest_image_keeps_previous_image(): void {
+        global $DB, $USER;
+
+        [$location, $oldest] = $this->create_full_history();
+        $bytes = $this->version_content((int) $oldest->id);
+
+        file_replacer::apply_binary($location, $bytes, (int) $USER->id, file_replacer::SOURCE_UPLOAD);
+        file_replacer::apply_binary($location, self::png(501), (int) $USER->id, file_replacer::SOURCE_UPLOAD);
+
+        $this->assert_newest_version_with_blob($location, $oldest->contenthash);
+        $this->assertSame(file_replacer::MAX_VERSIONS_PER_LOCATION, $DB->count_records(self::TABLE));
+        $this->assertSame(file_replacer::MAX_VERSIONS_PER_LOCATION, $this->count_blobs());
+    }
+
+    /**
+     * Across new images, reverts and re-uploads, the image live before a write is always the newest version.
+     */
+    public function test_previous_image_is_never_pruned(): void {
+        global $DB, $USER;
+
+        [$location, ] = $this->create_full_history();
+        for ($i = 0; $i < 48; $i++) {
+            $previous = $location->get_stored_file()->get_contenthash();
+            $oldest = $DB->get_records(self::TABLE, null, 'timecreated ASC, id ASC', '*', 0, 1);
+            $oldest = reset($oldest);
+            $useoldest = $oldest->contenthash !== $previous;
+
+            if ($i % 3 !== 2 && $useoldest) {
+                $bytes = $this->version_content((int) $oldest->id);
+            } else {
+                $bytes = self::png(600 + $i);
+            }
+            $newhash = sha1($bytes);
+            $wasarchived = $DB->record_exists(self::TABLE, ['contenthash' => $newhash]);
+
+            if ($i % 3 === 0 && $useoldest) {
+                file_replacer::revert_to_version($location, (int) $oldest->id, (int) $USER->id);
+            } else {
+                file_replacer::apply_binary($location, $bytes, (int) $USER->id, file_replacer::SOURCE_UPLOAD);
+            }
+
+            $this->assertSame($newhash, $location->get_stored_file()->get_contenthash());
+            $this->assert_newest_version_with_blob($location, $previous);
+            if ($wasarchived) {
+                $this->assertTrue($DB->record_exists(self::TABLE, ['contenthash' => $newhash]), "Write {$i}");
+            }
+            $rows = $DB->count_records(self::TABLE);
+            $this->assertSame($rows, $this->count_blobs(), "Write {$i}");
+            $this->assertLessThanOrEqual(file_replacer::MAX_VERSIONS_PER_LOCATION + 1, $rows, "Write {$i}");
+        }
+    }
+
+    /**
+     * Assert that a content hash is the newest history entry and its blob exists.
+     *
+     * @param location $location
+     * @param string $contenthash
+     * @return void
+     */
+    private function assert_newest_version_with_blob(location $location, string $contenthash): void {
+        global $DB;
+
+        $row = $DB->get_record(self::TABLE, ['locationhash' => $location->hash(), 'contenthash' => $contenthash]);
+        $this->assertNotFalse($row);
+        $this->assertNotSame('', $this->version_content((int) $row->id));
+        $this->assertSame($contenthash, file_replacer::get_history_for_location($location)[0]['contenthash']);
+    }
+
+    /**
+     * Bytes of an archived version's blob.
+     *
+     * @param int $versionid
+     * @return string Empty when the blob is missing.
+     */
+    private function version_content(int $versionid): string {
+        $files = get_file_storage()->get_area_files(
+            \context_system::instance()->id,
+            'filter_dixeo_imageeditor',
+            file_replacer::FILEAREA_HISTORY,
+            $versionid,
+            'id',
+            false
+        );
+        $file = reset($files);
+        return $file ? $file->get_content() : '';
+    }
+
+    /**
      * Archived non-raster files are removed by the cleanup; raster history of the same image stays.
      */
     public function test_cleanup_removes_non_raster_history_blobs(): void {

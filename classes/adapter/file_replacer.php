@@ -206,13 +206,14 @@ final class file_replacer {
     /**
      * Archive the current file bytes into version history.
      *
-     * History is not pruned here: callers prune after the new bytes are written, so the
-     * version matching the live image is known and kept.
+     * The current image always becomes the newest version: a version already holding the
+     * same bytes is replaced by a new row and blob. History is not pruned here: callers prune
+     * after the new bytes are written, so the version matching the live image is known and kept.
      *
      * @param location $location
      * @param string $source
      * @param int $userid
-     * @return int|null Version row id, or null when content is already archived
+     * @return int|null Version row id, or null when the current file is a status asset
      */
     private static function archive_current(location $location, string $source, int $userid): ?int {
         global $DB;
@@ -222,13 +223,26 @@ final class file_replacer {
             throw new \moodle_exception('error_not_eligible', 'filter_dixeo_imageeditor');
         }
 
+        $fs = get_file_storage();
+        $systemcontextid = \context_system::instance()->id;
+
         $contenthash = $file->get_contenthash();
         // Pending/failure stubs must not enter version history (e.g. retry after error.png).
         if (self::is_status_asset_hash($contenthash)) {
             return null;
         }
-        if (self::has_history_contenthash($location, $contenthash)) {
-            return null;
+
+        // The image being replaced becomes the newest version, even if it was archived before.
+        // The live file shares the same file-pool content, so deleting the old blob keeps the bytes.
+        $existing = $DB->get_records(
+            'filter_dixeo_imageeditor_version',
+            ['locationhash' => $location->hash(), 'contenthash' => $contenthash],
+            '',
+            'id'
+        );
+        foreach ($existing as $row) {
+            $fs->delete_area_files($systemcontextid, 'filter_dixeo_imageeditor', self::FILEAREA_HISTORY, (int) $row->id);
+            $DB->delete_records('filter_dixeo_imageeditor_version', ['id' => $row->id]);
         }
 
         $now = time();
@@ -242,9 +256,8 @@ final class file_replacer {
             'timecreated' => $now,
         ]));
 
-        $systemcontext = \context_system::instance();
         $record = [
-            'contextid' => $systemcontext->id,
+            'contextid' => $systemcontextid,
             'component' => 'filter_dixeo_imageeditor',
             'filearea' => self::FILEAREA_HISTORY,
             'itemid' => $versionid,
@@ -253,8 +266,6 @@ final class file_replacer {
             'userid' => $userid,
             'mimetype' => $file->get_mimetype(),
         ];
-
-        $fs = get_file_storage();
         $fs->create_file_from_string($record, $file->get_content());
 
         return (int) $versionid;
@@ -263,7 +274,10 @@ final class file_replacer {
     /**
      * Delete archived versions beyond the newest {@see self::MAX_VERSIONS_PER_LOCATION}.
      *
-     * The version that matches the image's current content is never deleted.
+     * The version that matches the image's current content is never deleted. The image that was
+     * live before the latest write is never deleted either: it was just archived as the newest row
+     * (by timecreated, then id), and only rows beyond the newest
+     * {@see self::MAX_VERSIONS_PER_LOCATION} are candidates.
      *
      * @param location $location Image whose history is pruned.
      * @param string $currenthash Content hash of the image's current bytes.
@@ -343,7 +357,8 @@ final class file_replacer {
      *
      * AI job results and restored versions skip the upload externals; the bytes are validated
      * here so every write path rejects SVG and non-images before course files are replaced.
-     * History is pruned only after the write, keeping the version that matches the live image.
+     * History is pruned only after the write: the image being replaced is archived as the newest
+     * version; the version matching the live image is never pruned.
      *
      * @param location $location Image being replaced.
      * @param \stored_file $target Stored file of $location.
@@ -417,22 +432,6 @@ final class file_replacer {
         self::replace_with_history($location, $target, $content, self::SOURCE_REVERTED, $userid, 'error_not_eligible');
 
         return self::get_current_image_url($location);
-    }
-
-    /**
-     * Whether an archived version already stores this file content.
-     *
-     * @param location $location
-     * @param string $contenthash
-     * @return bool
-     */
-    private static function has_history_contenthash(location $location, string $contenthash): bool {
-        global $DB;
-
-        return $DB->record_exists('filter_dixeo_imageeditor_version', [
-            'locationhash' => $location->hash(),
-            'contenthash' => $contenthash,
-        ]);
     }
 
     /**

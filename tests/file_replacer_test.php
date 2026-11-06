@@ -273,7 +273,7 @@ final class file_replacer_test extends \advanced_testcase {
         $this->assertNotSame($originalhash, $location->get_stored_file()->get_contenthash());
     }
 
-    public function test_apply_binary_skips_archive_when_current_hash_already_in_history(): void {
+    public function test_apply_binary_refreshes_existing_version_of_current_image(): void {
         global $USER, $DB;
 
         [$location] = $this->create_page_image_location();
@@ -306,6 +306,10 @@ final class file_replacer_test extends \advanced_testcase {
             'locationhash' => $location->hash(),
         ]));
         $this->assertSame($countbefore, $countafter);
+        $this->assertFalse($DB->record_exists('filter_dixeo_imageeditor_version', ['id' => $pngversionid]));
+        $newest = file_replacer::get_history_for_location($location)[0];
+        $this->assertSame($originalhash, $newest['contenthash']);
+        $this->assertNotSame($pngversionid, $newest['id']);
     }
 
     public function test_delete_version_removes_record_and_file(): void {
