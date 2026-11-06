@@ -17,6 +17,7 @@
 namespace filter_dixeo_imageeditor\adapter;
 
 use local_dixeo\service\image\content\asset_helper;
+use local_dixeo\service\image\content\in_place_writer;
 use local_dixeo\service\image\content\location;
 use local_dixeo\service\image\result_helper;
 use filter_dixeo_imageeditor\event\content_image_updated;
@@ -363,7 +364,7 @@ final class file_replacer {
     }
 
     /**
-     * Replace stored file content using a draft area temp file.
+     * Replace stored file content in place for the given user.
      *
      * @param \stored_file $file
      * @param string $binary
@@ -371,66 +372,7 @@ final class file_replacer {
      * @return void
      */
     private static function replace_file_content(\stored_file $file, string $binary, int $userid): void {
-        global $DB;
-
-        $fs = get_file_storage();
-        $usercontext = \context_user::instance($userid);
-        $draftrecord = [
-            'contextid' => $usercontext->id,
-            'component' => 'user',
-            'filearea' => 'draft',
-            'itemid' => self::allocate_draft_itemid($userid),
-            'filepath' => '/',
-            'filename' => 'dixeo-replace-' . time() . '.bin',
-            'userid' => $userid,
-        ];
-        $temp = $fs->create_file_from_string($draftrecord, $binary);
-        $file->replace_file_with($temp);
-        $temp->delete();
-
-        $mimetype = self::detect_mimetype($binary, $file->get_filename());
-        if ($mimetype !== $file->get_mimetype()) {
-            $DB->set_field('files', 'mimetype', $mimetype, ['id' => $file->get_id()]);
-        }
-    }
-
-    /**
-     * Allocate a draft item id without calling file_get_unused_draft_itemid().
-     *
-     * That helper requires an active web session (require_login), which breaks
-     * image apply during adhoc polling and other non-interactive contexts.
-     *
-     * @param int $userid
-     * @return int
-     */
-    private static function allocate_draft_itemid(int $userid): int {
-        $fs = get_file_storage();
-        $context = \context_user::instance($userid);
-
-        for ($attempt = 0; $attempt < 20; $attempt++) {
-            $draftitemid = random_int(100000, 999999999);
-            if (!$fs->file_exists($context->id, 'user', 'draft', $draftitemid, '/', '.')) {
-                return $draftitemid;
-            }
-        }
-
-        throw new \moodle_exception('error_job_failed', 'filter_dixeo_imageeditor');
-    }
-
-    /**
-     * Detect mimetype from binary content or filename.
-     *
-     * @param string $binary
-     * @param string $filename
-     * @return string
-     */
-    private static function detect_mimetype(string $binary, string $filename): string {
-        $finfo = new \finfo(FILEINFO_MIME_TYPE);
-        $fromcontent = $finfo->buffer($binary);
-        if (is_string($fromcontent) && $fromcontent !== '' && $fromcontent !== 'application/octet-stream') {
-            return $fromcontent;
-        }
-        return \file_storage::mimetype('content://', $filename) ?: 'application/octet-stream';
+        in_place_writer::replace_content($file, $binary, $userid);
     }
 
     /**
