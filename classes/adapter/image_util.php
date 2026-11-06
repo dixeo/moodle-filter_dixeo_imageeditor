@@ -16,6 +16,7 @@
 
 namespace filter_dixeo_imageeditor\adapter;
 
+use local_dixeo\service\image\image_bounds;
 use local_dixeo\util\input_limits;
 
 /**
@@ -77,14 +78,16 @@ final class image_util {
     }
 
     /**
-     * Validate image bytes for content type only (no upload size limit).
+     * Validate image bytes for content type and pixel size (no upload size limit).
      *
      * Used by all apply paths including AI job results. Rejects SVG because it
-     * can embed scripts and the edit capability only declares RISK_SPAM.
+     * can embed scripts and the edit capability only declares RISK_SPAM. Rejects
+     * images outside {@see image_bounds} display bounds.
      *
      * @param string $binary
      * @param string $errorstring Language string key when validation fails.
      * @return void
+     * @throws \moodle_exception $errorstring, or local_dixeo error:image_dimensions.
      */
     public static function assert_valid_web_image_content(
         string $binary,
@@ -100,9 +103,11 @@ final class image_util {
             throw new \moodle_exception($errorstring, 'filter_dixeo_imageeditor');
         }
 
-        if (@getimagesizefromstring($binary) === false) {
+        $size = @getimagesizefromstring($binary);
+        if ($size === false) {
             throw new \moodle_exception($errorstring, 'filter_dixeo_imageeditor');
         }
+        image_bounds::require_display_size((int) $size[0], (int) $size[1]);
     }
 
     /**

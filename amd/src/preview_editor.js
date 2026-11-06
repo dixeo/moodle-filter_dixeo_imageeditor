@@ -23,7 +23,9 @@
 
 define([
     'filter_dixeo_imageeditor/lib/cropper',
-], function(Cropper) {
+    'core/notification',
+    'core/str',
+], function(Cropper, Notification, Str) {
     'use strict';
 
 /** @typedef {{grayscale: boolean, sepia: boolean, brightness: number, contrast: number}} FilterState */
@@ -94,6 +96,12 @@ const snapshotsEqual = (left, right) => {
 /** @type {number} */
 const ZOOM_RATIO_TOLERANCE = 0.001;
 
+/** @type {number} Fallback maximum pixels per side when the server sends none. */
+const DEFAULT_MAX_IMAGE_DIMENSION = 8000;
+
+/** @type {number} Fallback maximum total pixels when the server sends none. */
+const DEFAULT_MAX_IMAGE_PIXELS = 40000000;
+
 /**
  * Build CSS filter string for live preview.
  *
@@ -124,10 +132,14 @@ class PreviewEditor {
      * @param {Function} [options.onStateChange]
      * @param {Function} [options.onSaveRequest] Async save handler receiving base64 payload
      * @param {Function} [options.onSaveError] Error handler for failed save
+     * @param {number} [options.maxImageDimension] Maximum pixels per side of a stored image
+     * @param {number} [options.maxImagePixels] Maximum total pixels of a stored image
      */
     constructor(panel, options) {
         this.panel = panel;
         this.wrap = options.wrap;
+        this.maxImageDimension = options.maxImageDimension || DEFAULT_MAX_IMAGE_DIMENSION;
+        this.maxImagePixels = options.maxImagePixels || DEFAULT_MAX_IMAGE_PIXELS;
         this.onStateChange = options.onStateChange || noop;
         this.onSaveRequest = options.onSaveRequest || noopAsync;
         this.onSaveError = options.onSaveError || noop;
@@ -238,6 +250,61 @@ class PreviewEditor {
     }
 
     /**
+     * Factor that brings a canvas of this size within the stored image bounds.
+     *
+     * @param {number} width
+     * @param {number} height
+     * @returns {number} 1 when the size is already within bounds, else a factor below 1.
+     */
+    boundedScale(width, height) {
+        if (!width || !height) {
+            return 1;
+        }
+        return Math.min(
+            1,
+            this.maxImageDimension / width,
+            this.maxImageDimension / height,
+            Math.sqrt(this.maxImagePixels / (width * height))
+        );
+    }
+
+    /**
+     * Cropped canvas options sized within the stored image bounds.
+     *
+     * @returns {Object}
+     */
+    getBoundedCropOptions() {
+        const data = this.cropper.getData(true);
+        const scale = this.boundedScale(data.width, data.height);
+        return {
+            width: Math.max(1, Math.round(data.width * scale)),
+            height: Math.max(1, Math.round(data.height * scale)),
+            imageSmoothingEnabled: true,
+            imageSmoothingQuality: 'high',
+        };
+    }
+
+    /**
+     * Show the image size limit message.
+     *
+     * @returns {Promise<void>}
+     */
+    async showImageTooLarge() {
+        const [title, message] = await Str.get_strings([
+            {key: 'error', component: 'moodle'},
+            {
+                key: 'error:image_dimensions',
+                component: 'local_dixeo',
+                param: {
+                    dimension: this.maxImageDimension,
+                    megapixels: Math.floor(this.maxImagePixels / 1000000),
+                },
+            },
+        ]);
+        await Notification.alert(title, message);
+    }
+
+    /**
      * @returns {FilterState}
      */
     getFilterState() {
@@ -313,10 +380,11 @@ class PreviewEditor {
             return false;
         }
 
+        // The crop box in natural pixels is the size the cropped canvas would have.
         const data = this.cropper.getData(true);
         const imageData = this.cropper.getImageData();
-        const cropped = this.cropper.getCroppedCanvas();
-        if (!cropped || cropped.width === 0 || cropped.height === 0) {
+        const cropped = {width: data.width, height: data.height};
+        if (!cropped.width || !cropped.height) {
             return false;
         }
 
@@ -402,10 +470,7 @@ class PreviewEditor {
         }
 
         const before = this.createSnapshot();
-        const canvas = this.cropper.getCroppedCanvas({
-            imageSmoothingEnabled: true,
-            imageSmoothingQuality: 'high',
-        });
+        const canvas = this.cropper.getCroppedCanvas(this.getBoundedCropOptions());
         if (!canvas || canvas.width === 0 || canvas.height === 0) {
             return;
         }
@@ -437,9 +502,10 @@ class PreviewEditor {
             return null;
         }
 
-        const width = this.image.naturalWidth;
-        const height = this.image.naturalHeight;
-        if (!width || !height) {
+        const scale = this.boundedScale(this.image.naturalWidth, this.image.naturalHeight);
+        const width = Math.max(1, Math.round(this.image.naturalWidth * scale));
+        const height = Math.max(1, Math.round(this.image.naturalHeight * scale));
+        if (!this.image.naturalWidth || !this.image.naturalHeight) {
             return null;
         }
 
@@ -847,6 +913,13 @@ class PreviewEditor {
             return;
         }
 
+        await this.waitForImage(this.image);
+        if (this.boundedScale(this.image.naturalWidth, this.image.naturalHeight) < 1) {
+            // No canvas is built for an image above the stored image bounds.
+            await this.showImageTooLarge();
+            return;
+        }
+
         this.baselineSrc = this.image.src;
         this.workingImageSrc = this.image.src;
         this.filters = createDefaultFilters();
@@ -857,8 +930,6 @@ class PreviewEditor {
         this.history = [];
         this.historyIndex = -1;
         this.suppressCropHistory = true;
-
-        await this.waitForImage(this.image);
 
         this.editing = true;
         this.panel.classList.add('is-manual-editing');
@@ -950,10 +1021,7 @@ class PreviewEditor {
         if (!this.cropper) {
             return null;
         }
-        const canvas = this.cropper.getCroppedCanvas({
-            imageSmoothingEnabled: true,
-            imageSmoothingQuality: 'high',
-        });
+        const canvas = this.cropper.getCroppedCanvas(this.getBoundedCropOptions());
         if (!canvas) {
             return null;
         }

@@ -633,6 +633,8 @@ const openEditor = (wrap) => {
         if (previewPanel instanceof HTMLElement) {
             previewEditor = new PreviewEditor(previewPanel, {
                 wrap,
+                maxImageDimension: context.max_image_dimension,
+                maxImagePixels: context.max_image_pixels,
                 onStateChange: ({editing}) => {
                     setAiPanelDisabled(root, editing);
                 },

@@ -24,6 +24,7 @@ use filter_dixeo_imageeditor\adapter\feature_gate;
 use filter_dixeo_imageeditor\adapter\file_replacer;
 use filter_dixeo_imageeditor\adapter\image_util;
 use local_dixeo\repository\image\job_repository;
+use local_dixeo\service\image\image_bounds;
 
 /**
  * Load modal context for one image location.
@@ -102,6 +103,8 @@ final class get_editor_context extends external_api {
             'locked' => job_repository::has_blocking_job($location),
             'location_status' => $status,
             'upload_accept' => image_util::get_web_image_accept_attribute(),
+            'max_image_dimension' => image_bounds::MAX_DIMENSION,
+            'max_image_pixels' => image_bounds::MAX_PIXELS,
             'prefill_prompt' => $prefillprompt,
             'prefill_quality' => $prefillquality,
             'prefill_mode' => $prefillmode,
@@ -125,6 +128,8 @@ final class get_editor_context extends external_api {
             'locked' => new external_value(PARAM_BOOL, 'Job in progress'),
             'location_status' => self::location_status_returns(),
             'upload_accept' => new external_value(PARAM_TEXT, 'Accepted upload file types'),
+            'max_image_dimension' => new external_value(PARAM_INT, 'Maximum pixels per side of a stored image'),
+            'max_image_pixels' => new external_value(PARAM_INT, 'Maximum total pixels of a stored image'),
             'prefill_prompt' => new external_value(PARAM_RAW, 'Prefill prompt when last job failed', VALUE_DEFAULT, ''),
             'prefill_quality' => new external_value(PARAM_ALPHA, 'Prefill quality when last job failed', VALUE_DEFAULT, 'medium'),
             'prefill_mode' => new external_value(PARAM_ALPHA, 'Prefill mode when last job failed', VALUE_DEFAULT, 'landscape'),
