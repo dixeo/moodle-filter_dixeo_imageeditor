@@ -118,7 +118,8 @@ final class version_retention_test extends \advanced_testcase {
 
         provider::export_user_data(new approved_contextlist($USER, 'filter_dixeo_imageeditor', [$context->id]));
         $subcontext = [get_string('privacy:pathversions', 'filter_dixeo_imageeditor')];
-        $this->assertCount(file_replacer::MAX_VERSIONS_PER_LOCATION, writer::with_context($context)->get_data($subcontext)->versions);
+        $exported = writer::with_context($context)->get_data($subcontext);
+        $this->assertCount(file_replacer::MAX_VERSIONS_PER_LOCATION, $exported->versions);
 
         provider::delete_data_for_all_users_in_context($context);
         $this->assertSame(0, $DB->count_records(self::TABLE));
