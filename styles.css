@@ -218,7 +218,7 @@
     display: flex;
     gap: 0.75rem;
     overflow-x: auto;
-    padding-bottom: 10px;
+    padding-bottom: 1rem;
     width: 100%;
 }
 
@@ -255,10 +255,11 @@
     border-radius: 0.25rem;
 }
 
-.dixeo-imageeditor-modal__history-menu {
+.dixeo-imageeditor-modal__history-item > .dixeo-imageeditor-modal__history-menu {
     position: absolute;
     top: 0.25rem;
     right: 0.25rem;
+    z-index: 2;
 }
 
 .dixeo-imageeditor-modal__history-menu-toggle {
@@ -272,6 +273,8 @@
     margin: 0;
 }
 
+/* Bootstrap's .dropdown-toggle::after follows this file and has equal specificity. */
+.dixeo-imageeditor-modal__history-item > .dixeo-imageeditor-modal__history-menu
 .dixeo-imageeditor-modal__history-menu-toggle::after {
     display: none;
 }
@@ -534,14 +537,18 @@ body.path-mod-slideshow .slide-media > .dixeo-slideshow-imageeditor {
 body.path-mod-slideshow .slide > .dixeo-slideshow-imageeditor .dixeo-imageeditor-editbtn,
 body.path-mod-slideshow .slide-media > .dixeo-slideshow-imageeditor .dixeo-imageeditor-editbtn {
     position: static;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(16, 27, 44, 0.82);
     color: #fff;
 }
 
 body.path-mod-slideshow .dixeo-slideshow-imageeditor .dixeo-imageeditor-editbtn:hover,
 body.path-mod-slideshow .dixeo-slideshow-imageeditor .dixeo-imageeditor-editbtn:focus,
 body.path-mod-slideshow .dixeo-slideshow-imageeditor .dixeo-imageeditor-editbtn:active {
+    border: 0;
+    background: rgba(16, 27, 44, 0.82);
     color: #fff;
-    background-color: rgba(16, 27, 44, 0.82);
 }
 
 body.path-mod-slideshow .slide > .dixeo-slideshow-imageeditor.is-generating,
