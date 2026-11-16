@@ -27,6 +27,8 @@ defined('MOODLE_INTERNAL') || die();
 $string['close'] = 'Fermer';
 $string['dixeo_imageeditor:edit'] = 'Modifier des images de contenu intégrées avec l\'IA';
 $string['editimage'] = 'Modifier l\'image';
+$string['error_connection'] = 'La connexion au serveur a été perdue. Vérifiez votre réseau et réessayez.';
+$string['error_connection_image'] = 'La connexion a été perdue pendant la création de l’image. Elle a peut-être quand même été créée : rechargez la page avant de réessayer.';
 $string['error_delete_blocked'] = 'Impossible de supprimer de l\'historique pendant qu\'une tâche est en cours.';
 $string['error_delete_current'] = 'Impossible de supprimer l\'entrée de l\'historique correspondant à l\'image actuelle.';
 $string['error_job_failed'] = 'Échec de la génération de l\'image. Veuillez réessayer.';

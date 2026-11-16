@@ -22,7 +22,6 @@
  */
 
 define([
-    'core/ajax',
     'core/modal_cancel',
     'core/modal_events',
     'core/notification',
@@ -32,7 +31,10 @@ define([
     'filter_dixeo_imageeditor/image_sync',
     'filter_dixeo_imageeditor/polling',
     'filter_dixeo_imageeditor/toast',
-], function(Ajax, CancelModal, ModalEvents, Notification, Templates, Str, PreviewEditor, imageSync, polling, toast) {
+    'local_dixeo/network',
+    'filter_dixeo_imageeditor/connection',
+], function(CancelModal, ModalEvents, Notification, Templates, Str, PreviewEditor, imageSync, polling, toast, Network,
+        Connection) {
     'use strict';
 
     /* eslint-disable camelcase -- Mustache context and webservice fields use Moodle snake_case. */
@@ -333,15 +335,32 @@ const refreshHistorySection = (root, context, history, currentContenthash) => {
 };
 
 /**
+ * Read the editor context of one location, retrying through short connection losses.
+ *
+ * @param {HTMLElement} wrap
+ * @returns {Promise<Object>}
+ */
+const fetchEditorContext = (wrap) => Network.retryRead(() => Network.call({
+    methodname: 'filter_dixeo_imageeditor_get_editor_context',
+    args: imageSync.getLocationArgs(wrap),
+}, {timeout: Network.TIMEOUT_STATUS_MS}));
+
+/**
+ * Send one change to the image of a location. It is never sent again automatically.
+ *
+ * @param {string} methodname
+ * @param {Object} args
+ * @returns {Promise<Object>}
+ */
+const callAction = (methodname, args) => Network.call({methodname, args}, {timeout: Network.TIMEOUT_ACTION_MS});
+
+/**
  * Fetch fresh history and current contenthash from the server.
  *
  * @param {HTMLElement} wrap
  * @returns {Promise<{history: Array, currentContenthash: string}>}
  */
-const fetchEditorSnapshot = (wrap) => Ajax.call([{
-    methodname: 'filter_dixeo_imageeditor_get_editor_context',
-    args: imageSync.getLocationArgs(wrap),
-}])[0].then((response) => ({
+const fetchEditorSnapshot = (wrap) => fetchEditorContext(wrap).then((response) => ({
     history: response.history || [],
     currentContenthash: response.current_contenthash || '',
 }));
@@ -373,7 +392,7 @@ const getSelectedSize = (root) => {
 };
 
 /**
- * Submit generate or edit job.
+ * Submit generate or edit job. A paid start: sent once.
  *
  * @param {HTMLElement} wrap
  * @param {string} mode
@@ -388,16 +407,10 @@ const submitJob = (wrap, mode, form) => {
     };
 
     if (mode === 'generate') {
-        return Ajax.call([{
-            methodname: 'filter_dixeo_imageeditor_start_generate',
-            args: {...args, prompt: form.prompt},
-        }])[0];
+        return callAction('filter_dixeo_imageeditor_start_generate', {...args, prompt: form.prompt});
     }
 
-    return Ajax.call([{
-        methodname: 'filter_dixeo_imageeditor_start_edit',
-        args: {...args, instructions: form.prompt},
-    }])[0];
+    return callAction('filter_dixeo_imageeditor_start_edit', {...args, instructions: form.prompt});
 };
 
 /**
@@ -474,10 +487,8 @@ const openHistoryPreviewModal = async(options) => {
         if (isManualEditing(previewEditor)) {
             return;
         }
-        const response = await Ajax.call([{
-            methodname: 'filter_dixeo_imageeditor_revert_version',
-            args: {...imageSync.getLocationArgs(wrap), versionid},
-        }])[0];
+        const response = await callAction('filter_dixeo_imageeditor_revert_version',
+            {...imageSync.getLocationArgs(wrap), versionid});
         await imageSync.applyImageResponse(response, {
             wrap,
             root: editorRoot,
@@ -495,10 +506,8 @@ const openHistoryPreviewModal = async(options) => {
         if (isManualEditing(previewEditor)) {
             return;
         }
-        const response = await Ajax.call([{
-            methodname: 'filter_dixeo_imageeditor_delete_version',
-            args: {...imageSync.getLocationArgs(wrap), versionid},
-        }])[0];
+        const response = await callAction('filter_dixeo_imageeditor_delete_version',
+            {...imageSync.getLocationArgs(wrap), versionid});
         historyState.history = response.history || [];
         await onHistoryChange(historyState.history, response.current_contenthash || '');
         if (!historyState.history.length) {
@@ -545,7 +554,7 @@ const openHistoryPreviewModal = async(options) => {
             if (isManualEditing(previewEditor)) {
                 return;
             }
-            handleSetCurrent(versionid).catch(Notification.exception);
+            handleSetCurrent(versionid).catch(Connection.exception);
             return;
         }
         if (action === 'delete-history') {
@@ -553,7 +562,7 @@ const openHistoryPreviewModal = async(options) => {
             if (isManualEditing(previewEditor)) {
                 return;
             }
-            handleDelete(versionid).catch(Notification.exception);
+            handleDelete(versionid).catch(Connection.exception);
         }
     });
 
@@ -576,10 +585,7 @@ const openEditor = (wrap) => {
     }
     openingWrap = wrap;
 
-    Ajax.call([{
-        methodname: 'filter_dixeo_imageeditor_get_editor_context',
-        args: imageSync.getLocationArgs(wrap),
-    }])[0].then(async(context) => {
+    fetchEditorContext(wrap).then(async(context) => {
         if (context.locked) {
             releaseOpeningWrap(wrap);
             Notification.addNotification({
@@ -639,16 +645,13 @@ const openEditor = (wrap) => {
                     setAiPanelDisabled(root, editing);
                 },
                 onSaveError: (error) => {
-                    Notification.exception(error);
+                    Connection.exception(error);
                 },
                 onSaveRequest: async(imageBase64) => {
-                    const response = await Ajax.call([{
-                        methodname: 'filter_dixeo_imageeditor_apply_manual_edit',
-                        args: {
-                            ...imageSync.getLocationArgs(wrap),
-                            image_base64: imageBase64,
-                        },
-                    }])[0];
+                    const response = await callAction('filter_dixeo_imageeditor_apply_manual_edit', {
+                        ...imageSync.getLocationArgs(wrap),
+                        image_base64: imageBase64,
+                    });
                     const result = await imageSync.applyImageResponse(response, imageResponseContext());
                     await notifyImageUpdated(wrap, root);
                     return result;
@@ -753,19 +756,15 @@ const openEditor = (wrap) => {
             await updateSubmitLabel();
         };
 
-        const handleSetCurrent = (versionid) => Ajax.call([{
-            methodname: 'filter_dixeo_imageeditor_revert_version',
-            args: {...imageSync.getLocationArgs(wrap), versionid},
-        }])[0].then(async(response) => {
+        const handleSetCurrent = (versionid) => callAction('filter_dixeo_imageeditor_revert_version',
+            {...imageSync.getLocationArgs(wrap), versionid}).then(async(response) => {
             const result = await imageSync.applyImageResponse(response, imageResponseContext());
             await notifyImageUpdated(wrap, root);
             return result;
         });
 
-        const handleDeleteHistory = (versionid) => Ajax.call([{
-            methodname: 'filter_dixeo_imageeditor_delete_version',
-            args: {...imageSync.getLocationArgs(wrap), versionid},
-        }])[0].then(async(response) => {
+        const handleDeleteHistory = (versionid) => callAction('filter_dixeo_imageeditor_delete_version',
+            {...imageSync.getLocationArgs(wrap), versionid}).then(async(response) => {
             await syncHistory(response.history || [], response.current_contenthash || '');
         });
 
@@ -807,17 +806,14 @@ const openEditor = (wrap) => {
             }
             try {
                 const dataUrl = await readFileAsDataUrl(file);
-                const response = await Ajax.call([{
-                    methodname: 'filter_dixeo_imageeditor_apply_upload',
-                    args: {
-                        ...imageSync.getLocationArgs(wrap),
-                        image_base64: dataUrl,
-                    },
-                }])[0];
+                const response = await callAction('filter_dixeo_imageeditor_apply_upload', {
+                    ...imageSync.getLocationArgs(wrap),
+                    image_base64: dataUrl,
+                });
                 await imageSync.applyImageResponse(response, imageResponseContext());
                 await notifyImageUpdated(wrap, root);
             } catch (error) {
-                Notification.exception(error);
+                Connection.exception(error);
             } finally {
                 resetUploadInput();
             }
@@ -904,39 +900,49 @@ const openEditor = (wrap) => {
             setPreviewGenerating(root, true, label);
             polling.setGeneratingOverlay(wrap, true, label);
 
+            const releaseSubmit = () => {
+                setPreviewGenerating(root, false);
+                setSubmitDisabled(root, false);
+            };
+            const pollCallbacks = {
+                onApplied: async(status) => {
+                    setPreviewGenerating(root, false);
+                    setSubmitDisabled(root, false);
+                    if (!previewEditor?.isEditing()) {
+                        await imageSync.applyImageResponse({
+                            imageurl: status.imageurl || '',
+                            current_contenthash: status.current_contenthash || wrap.dataset.contenthash || '',
+                            history: [],
+                        }, {
+                            wrap,
+                            root,
+                            previewEditor,
+                            syncHistory: async() => undefined,
+                        });
+                    }
+                    const snapshot = await fetchEditorSnapshot(wrap);
+                    await syncHistory(snapshot.history, snapshot.currentContenthash);
+                },
+                onFailed: releaseSubmit,
+                onTimeout: releaseSubmit,
+            };
+
             submitJob(wrap, mode, {
                 prompt,
                 size: getSelectedSize(root),
                 quality: getCheckedRadioValue(root, 'dixeo-imageeditor-quality') || 'medium',
             }).then(() => {
-                polling.startStatusPolling(wrap, {
-                    onApplied: async(status) => {
-                        setPreviewGenerating(root, false);
-                        setSubmitDisabled(root, false);
-                        if (!previewEditor?.isEditing()) {
-                            await imageSync.applyImageResponse({
-                                imageurl: status.imageurl || '',
-                                current_contenthash: status.current_contenthash || wrap.dataset.contenthash || '',
-                                history: [],
-                            }, {
-                                wrap,
-                                root,
-                                previewEditor,
-                                syncHistory: async() => undefined,
-                            });
-                        }
-                        const snapshot = await fetchEditorSnapshot(wrap);
-                        await syncHistory(snapshot.history, snapshot.currentContenthash);
-                    },
-                    onFailed: () => {
-                        setPreviewGenerating(root, false);
-                        setSubmitDisabled(root, false);
-                    },
-                });
+                polling.startStatusPolling(wrap, pollCallbacks);
+                return undefined;
             }).catch((error) => {
-                setPreviewGenerating(root, false);
+                if (Network.isConnectionError(error)) {
+                    // The start may have reached the server: follow the location status instead
+                    // of sending it again.
+                    polling.startStatusPolling(wrap, Object.assign({}, pollCallbacks, {lostStart: true}));
+                    return;
+                }
+                releaseSubmit();
                 polling.setGeneratingOverlay(wrap, false);
-                setSubmitDisabled(root, false);
                 Notification.exception(error);
             });
         };
@@ -1018,7 +1024,7 @@ const openEditor = (wrap) => {
                 if (previewEditor?.isEditing()) {
                     return;
                 }
-                handleSetCurrent(versionid).catch(Notification.exception);
+                handleSetCurrent(versionid).catch(Connection.exception);
                 return;
             }
 
@@ -1027,7 +1033,7 @@ const openEditor = (wrap) => {
                 if (previewEditor?.isEditing()) {
                     return;
                 }
-                handleDeleteHistory(versionid).catch(Notification.exception);
+                handleDeleteHistory(versionid).catch(Connection.exception);
             }
         });
 
@@ -1035,7 +1041,7 @@ const openEditor = (wrap) => {
         imageSync.updatePreviewImage(root, context.imageurl, context.current_contenthash || '');
     }).catch((error) => {
         releaseOpeningWrap(wrap);
-        Notification.exception(error);
+        Connection.exception(error);
     });
 };
 

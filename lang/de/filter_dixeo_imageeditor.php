@@ -27,6 +27,8 @@ defined('MOODLE_INTERNAL') || die();
 $string['close'] = 'Schließen';
 $string['dixeo_imageeditor:edit'] = 'Eingebettete Inhaltsbilder mit KI bearbeiten';
 $string['editimage'] = 'Bild bearbeiten';
+$string['error_connection'] = 'Die Verbindung zum Server wurde unterbrochen. Prüfen Sie Ihr Netzwerk und versuchen Sie es erneut.';
+$string['error_connection_image'] = 'Die Verbindung wurde während der Bilderstellung unterbrochen. Das Bild wurde möglicherweise trotzdem erstellt: Laden Sie die Seite neu, bevor Sie es erneut versuchen.';
 $string['error_delete_blocked'] = 'Löschen aus der Historie ist nicht möglich, solange ein Auftrag läuft.';
 $string['error_delete_current'] = 'Der Historieneintrag, der dem aktuellen Bild entspricht, kann nicht gelöscht werden.';
 $string['error_job_failed'] = 'Bildgenerierung fehlgeschlagen. Bitte versuchen Sie es erneut.';

@@ -27,6 +27,8 @@ defined('MOODLE_INTERNAL') || die();
 $string['close'] = 'Chiudi';
 $string['dixeo_imageeditor:edit'] = 'Modificare immagini di contenuto incorporate con IA';
 $string['editimage'] = 'Modifica immagine';
+$string['error_connection'] = 'La connessione al server è stata persa. Controlla la rete e riprova.';
+$string['error_connection_image'] = 'La connessione è stata persa durante la creazione dell’immagine. L’immagine potrebbe essere stata creata comunque: ricarica la pagina prima di riprovare.';
 $string['error_delete_blocked'] = 'Impossibile eliminare dalla cronologia mentre un job è in corso.';
 $string['error_delete_current'] = 'Impossibile eliminare la voce della cronologia corrispondente all\'immagine corrente.';
 $string['error_job_failed'] = 'Generazione immagine non riuscita. Riprova.';

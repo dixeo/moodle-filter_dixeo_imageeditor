@@ -22,12 +22,13 @@
  */
 
 define([
-    'core/ajax',
     'core/notification',
     'core/str',
+    'local_dixeo/network',
+    'filter_dixeo_imageeditor/connection',
     'filter_dixeo_imageeditor/image_sync',
     'filter_dixeo_imageeditor/toast',
-], function(Ajax, Notification, Str, imageSync, toast) {
+], function(Notification, Str, Network, Connection, imageSync, toast) {
     'use strict';
 
     const GENERATING_CLASS = 'is-generating';
@@ -129,13 +130,24 @@ define([
      * @returns {void}
      */
     const acknowledgeTerminalStatus = (wrap) => {
-        Ajax.call([{
+        Network.call({
             methodname: 'filter_dixeo_imageeditor_get_location_status',
             args: Object.assign({}, imageSync.getLocationArgs(wrap), {acknowledge: true}),
-        }])[0].catch(() => {
+        }, {timeout: Network.TIMEOUT_ACTION_MS}).catch(() => {
             // Acknowledge is best-effort cleanup.
         });
     };
+
+    /**
+     * Read the job status of one location.
+     *
+     * @param {HTMLElement} wrap
+     * @returns {Promise<Object>}
+     */
+    const fetchLocationStatus = (wrap) => Network.call({
+        methodname: 'filter_dixeo_imageeditor_get_location_status',
+        args: imageSync.getLocationArgs(wrap),
+    }, {timeout: Network.TIMEOUT_STATUS_MS});
 
     /**
      * Show a success or error toast for a completed job.
@@ -165,83 +177,159 @@ define([
     /**
      * Poll lock status for UX overlay only.
      *
+     * One status read runs at a time for a location. Connection failures are retried within the
+     * retry window; past it, polling stops and the connection message is shown.
+     *
+     * With lostStart, the job start request lost its answer: the poll waits for the job to show
+     * up and gives up with the "may have been created anyway" message when nothing advances.
+     *
      * @param {HTMLElement} wrap
      * @param {Object} [callbacks]
      * @param {Function} [callbacks.onApplied]
      * @param {Function} [callbacks.onFailed]
-     * @param {Function} [callbacks.onTimeout]
+     * @param {Function} [callbacks.onTimeout] Called when polling stops without a terminal status.
+     * @param {boolean} [callbacks.lostStart] Whether the job start request lost its answer.
      */
     const startStatusPolling = (wrap, callbacks = {}) => {
         const key = imageSync.getLocationKey(wrap);
         stopPolling(key);
         pollStartedAt.set(key, Date.now());
+        const retryWindow = Network.createRetryWindow();
+        const stallWatch = callbacks.lostStart ? Network.createStallWatch() : null;
+        let inFlight = false;
+
+        /**
+         * Stop polling without a terminal status and give the UI back.
+         */
+        const giveUp = () => {
+            stopPolling(key);
+            setGeneratingOverlay(wrap, false);
+            if (callbacks.onTimeout) {
+                callbacks.onTimeout();
+            }
+        };
+
+        /**
+         * Apply a terminal status: applied or failed.
+         *
+         * @param {Object} status
+         * @returns {Promise<void>}
+         */
+        const applyFinalStatus = async(status) => {
+            stopPolling(key);
+
+            if (status.status === 'applied') {
+                applyTerminalStatus(wrap, status);
+                setGeneratingOverlay(wrap, false);
+                await notifyJobResult(wrap, 'success');
+                if (callbacks.onApplied) {
+                    callbacks.onApplied(status);
+                }
+                acknowledgeTerminalStatus(wrap);
+                return;
+            }
+
+            const message = (status.errormessage || '').trim()
+                || await Str.getString('error_job_failed', 'filter_dixeo_imageeditor');
+            applyTerminalStatus(wrap, status, message);
+            setGeneratingOverlay(wrap, false);
+            await notifyJobResult(wrap, 'error', message, {modalOnly: true});
+            if (callbacks.onFailed) {
+                callbacks.onFailed(status);
+            }
+            acknowledgeTerminalStatus(wrap);
+        };
+
+        /**
+         * Handle a status read while waiting for a job whose start lost its answer.
+         *
+         * @param {string} state Status of the location.
+         * @param {boolean} running Whether a job is pending or processing.
+         * @returns {Promise<boolean>} True when polling stopped.
+         */
+        const followLostStart = async(state, running) => {
+            stallWatch.observe(state, running);
+            if (!stallWatch.stalled()) {
+                return false;
+            }
+            giveUp();
+            const message = await Connection.message('error_connection_image');
+            await notifyJobResult(wrap, 'error', message);
+            return true;
+        };
+
+        /**
+         * Handle the polling time limit.
+         *
+         * @returns {Promise<void>}
+         */
+        const timeOut = async() => {
+            giveUp();
+            try {
+                const message = await Str.getString('error_job_failed', 'filter_dixeo_imageeditor');
+                await notifyJobResult(wrap, 'error', message);
+            } catch (error) {
+                Notification.exception(error);
+            }
+        };
 
         const poll = async() => {
             const started = pollStartedAt.get(key) || Date.now();
             if (Date.now() - started > POLL_TIMEOUT_MS) {
-                stopPolling(key);
-                setGeneratingOverlay(wrap, false);
-                if (callbacks.onTimeout) {
-                    callbacks.onTimeout();
-                }
-                try {
-                    const message = await Str.getString('error_job_failed', 'filter_dixeo_imageeditor');
-                    await notifyJobResult(wrap, 'error', message);
-                } catch (error) {
-                    Notification.exception(error);
-                }
+                await timeOut();
                 return;
             }
 
+            let status;
             try {
-                const status = await Ajax.call([{
-                    methodname: 'filter_dixeo_imageeditor_get_location_status',
-                    args: imageSync.getLocationArgs(wrap),
-                }])[0];
+                status = await fetchLocationStatus(wrap);
+            } catch (failure) {
+                if (Network.isConnectionError(failure) && !retryWindow.shouldRetry(failure)) {
+                    giveUp();
+                    Connection.exception(failure);
+                }
+                // Server errors keep polling; do not open N error modals.
+                return;
+            }
+            retryWindow.succeeded();
 
-                if (!status?.status) {
+            try {
+                const state = status?.status || '';
+                const running = state === 'pending' || state === 'processing';
+                const final = state === 'applied' || state === 'failed';
+                if (final) {
+                    await applyFinalStatus(status);
                     return;
                 }
-
-                if (status.status === 'pending' || status.status === 'processing') {
+                if (stallWatch) {
+                    // The lost start has not shown up on the server yet, or is still running.
+                    await followLostStart(state, running);
                     return;
                 }
-
-                stopPolling(key);
-
-                if (status.status === 'applied') {
-                    applyTerminalStatus(wrap, status);
-                    setGeneratingOverlay(wrap, false);
-                    await notifyJobResult(wrap, 'success');
-                    if (callbacks.onApplied) {
-                        callbacks.onApplied(status);
-                    }
-                    acknowledgeTerminalStatus(wrap);
-                    return;
-                }
-
-                if (status.status === 'failed') {
-                    const message = (status.errormessage || '').trim()
-                        || await Str.getString('error_job_failed', 'filter_dixeo_imageeditor');
-                    applyTerminalStatus(wrap, status, message);
-                    setGeneratingOverlay(wrap, false);
-                    await notifyJobResult(wrap, 'error', message, {modalOnly: true});
-                    if (callbacks.onFailed) {
-                        callbacks.onFailed(status);
-                    }
-                    acknowledgeTerminalStatus(wrap);
+                if (state && !running) {
+                    stopPolling(key);
                 }
             } catch {
-                // Transient webservice/API errors: keep polling; do not open N error modals.
+                // A failure while applying the result keeps polling; do not open N error modals.
             }
         };
 
+        const tick = () => {
+            if (inFlight) {
+                return Promise.resolve();
+            }
+            inFlight = true;
+            return poll().finally(() => {
+                inFlight = false;
+            });
+        };
+
         pollTimers.set(key, window.setInterval(() => {
-            poll().catch(() => {
+            tick().catch(() => {
                 // Keep interval alive on unexpected rejections.
             });
         }, POLL_INTERVAL_MS));
-        poll().catch(() => {
+        tick().catch(() => {
             // First tick soft-fail.
         });
     };
@@ -274,10 +362,7 @@ define([
 
             const resume = async() => {
                 try {
-                    const status = await Ajax.call([{
-                        methodname: 'filter_dixeo_imageeditor_get_location_status',
-                        args: imageSync.getLocationArgs(wrap),
-                    }])[0];
+                    const status = await Network.retryRead(() => fetchLocationStatus(wrap));
 
                     if (status?.status === 'pending' || status?.status === 'processing') {
                         startStatusPolling(wrap);

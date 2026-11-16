@@ -27,6 +27,8 @@ defined('MOODLE_INTERNAL') || die();
 $string['close'] = 'Close';
 $string['dixeo_imageeditor:edit'] = 'Edit embedded content images with AI';
 $string['editimage'] = 'Edit image';
+$string['error_connection'] = 'The connection to the server was lost. Check your network and try again.';
+$string['error_connection_image'] = 'The connection was lost while the image was being created. It may have been created anyway: reload the page before trying again.';
 $string['error_delete_blocked'] = 'Cannot delete from history while a job is in progress.';
 $string['error_delete_current'] = 'Cannot delete the history entry that matches the current image.';
 $string['error_job_failed'] = 'Image generation failed. Please try again.';
